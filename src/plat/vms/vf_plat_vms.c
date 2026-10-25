@@ -592,7 +592,7 @@ unsigned int vfp_open_write(const char *spec, int text, unsigned long long expec
     f->writing = 1;
     f->text = text;
     f->fab.fab$b_org = FAB$C_SEQ;
-    f->fab.fab$l_fop = FAB$M_MXV;              /* always a new version (D8) */
+    f->fab.fab$l_fop = FAB$M_MXV | FAB$M_TEF;  /* a new version (D8); unused blocks freed at close */
     f->fab.fab$w_deq = 64;
     f->fab.fab$b_shr = FAB$M_NIL;
     if (text) {

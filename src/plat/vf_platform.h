@@ -59,7 +59,7 @@ typedef struct vfp_file vfp_file;
 unsigned int vfp_open_read(const char *spec, int *is_text, unsigned long long *bytes, vfp_file **f);
 /* Text: the next record (without line end) in buf, *got its length (cut to
    size). Binary: up to size bytes. At the end: VFP_EOF. */
-#define VFP_EOF 0x1001u
+#define VFP_EOF 0x1002u            /* even: a failure status, so "st & 1" loops stop */
 unsigned int vfp_read(vfp_file *f, char *buf, int size, int *got);
 
 /* Writing a download: always a new version of spec (which has no version).
