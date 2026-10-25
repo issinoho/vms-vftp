@@ -2,5 +2,5 @@
 # The SSH key is $VMS_SSH_KEY, default ~/.ssh/vms_ed25519.
 # sftp_workdir is relative to the sftp login directory, or absolute
 # (/DISK$NAME/dir/sub) for a work directory on another disk (ODS-5).
-# name  arch    host          port  user      vms_workdir                       sftp_workdir
-x86     X86_64  <x86-host>    22    username  DISK$USER:[USERNAME.VMS_VFTP]  /DISK$USER/username/vms_vftp
+# name  arch    host          port  user      vms_workdir                       sftp_workdir  libssh2_install (vms-libssh2 tools/build.sh output)
+x86     X86_64  <x86-host>    22    username  DISK$USER:[USERNAME.VMS_VFTP]  /DISK$USER/username/vms_vftp  DISK$USER:[USERNAME.VMS_LIBSSH2.libssh2-1_11_1.INSTALL_X86_64]
