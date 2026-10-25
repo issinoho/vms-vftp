@@ -61,7 +61,8 @@ for everything (no choice to make, but binary files then read badly in VMS tools
 VFTP reads and adds to the known_hosts that VSI's ssh uses, and offers the keys
 VSI's ssh would (`id_ed25519`, `id_ecdsa`, `id_rsa`), so trust and keys are shared.
 An unknown host shows its key fingerprint (SHA-256, as ssh does) and asks; a
-changed key refuses to connect. Where the files are is a Phase 0 probe.
+changed key refuses to connect. The files are in `SYS$LOGIN:[.SSH]` (N3), and libssh2
+reads them as they are.
 
 ## D8. Local files: VMS specifications (2026-10-25, proposed)
 

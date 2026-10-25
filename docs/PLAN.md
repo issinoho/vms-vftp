@@ -73,6 +73,9 @@ A transfer in progress is cancelled by Ctrl/C or F10 (partial file removed).
   where VSI OpenSSH keeps known_hosts and keys (SYS$LOGIN:[.SSH], D7); reading
   and writing RMS record formats from C (D6).
 
+Status 2026-10-25: vms-libssh2 builds on both nodes; handshake, host-key check
+against VSI's known_hosts and ed25519 key login work (N3). SFTP needs a test login.
+
 Exit: vms-libssh2's smoke test passes on both nodes; the user signs off this plan.
 
 ## Phase 1: SFTP

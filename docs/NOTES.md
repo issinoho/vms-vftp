@@ -11,3 +11,26 @@ and SSL31 V3.1-4, with `SSL3$LIBCRYPTO_SHR32.EXE` and `SSL3$LIBSSL_SHR32.EXE`
 symbols are defined. From the laptop: the IA64 node answers on ports 21 and 22;
 the x86 node's sshd is reached on another port and its FTP port does not answer.
 The Linux laptop has no libssh2 or OpenSSL headers.
+
+## N2. VSI OpenSSH's SFTP server, seen from Linux (2026-10-25, IA64)
+
+`sftp` from the laptop into the IA64 node, read-only. The login directory is
+`/USER$ROOT/iain` (device as the first path element, then directories in lower
+case as created). `ls -l` names files with their version (`build_vms.com;1`,
+`LICENSE.;1`) and directories as `src.DIR;1`, with Unix-style permissions mapped
+from the VMS protection, the owner's user name and its UIC group, and `?` for
+the link count. `/` is a pseudo root showing `BIN.DIR;1`, `USR.DIR;1`, `home.DIR;1`...
+A Stream_LF file (uploaded earlier by sftp) downloads byte for byte. Still to see:
+a variable-record text file (does the server send LF lines and what size does it
+report?), and paths with a version in them.
+
+## N3. libssh2 on both nodes (2026-10-25, vms-libssh2 smoke test)
+
+Our libssh2 1.11.1 build (SSL3) negotiates curve25519-sha256, ecdsa-sha2-nistp256
+and chacha20-poly1305@openssh.com with VSI OpenSSH 9.9 and with GitHub. The
+account's known_hosts is VSI ssh's own `USER$ROOT:[IAIN.SSH]KNOWN_HOSTS.`
+(SYS$LOGIN:[.SSH], D7) and libssh2 reads it in OpenSSH format (16 entries on x86,
+3 on IA64); GitHub's key MATCHes there. The OpenSSH-format `ID_ED25519.` loads
+and logs in to GitHub on both nodes. Each node's sshd offers publickey, password
+and keyboard-interactive. On x86 sshd listens on 2222 inside the node too (service
+SSHD2222; SSHD22 and FTP are disabled); IA64's sshd is on 22.
