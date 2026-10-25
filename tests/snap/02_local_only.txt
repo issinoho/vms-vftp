@@ -1,0 +1,24 @@
+ VFTP  TEST on STUBVMS                                        25-OCT-2026 10:12
+┌ LOCAL STUB$DKA0:[USERS.TEST] ─────────┬ REMOTE (not connected) ──────────────┐
+│ [-]  (parent directory)               │                                      │
+│ SSH.DIR;1                 <DIR> 21-OCT│ Not connected.                       │
+│ WORK.DIR;1                <DIR> 21-OCT│                                      │
+│ KIT.BCK;1                     3 21-OCT│ O opens a connection (SFTP).         │
+│ LOGIN.COM;1                   1 21-OCT│                                      │
+│ NOTES.TXT;2                   1 22-OCT│                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+├───────────────────────────────────────┴──────────────────────────────────────┤
+│ 3 files 5 blocks                                   Mode AUTO   not connected │
+└──────────────────────────────────────────────────────────────────────────────┘
+ FILE  Open Get Put Copy Delete Rename Mkdir Tag View Attr X-mode Sort Filter
+ COMMANDS  PF1 GOLD  Tab other pane  Return open  Left up  Jump  Help  F10 exit

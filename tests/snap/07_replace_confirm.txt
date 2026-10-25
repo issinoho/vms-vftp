@@ -1,0 +1,24 @@
+ VFTP  Put into /home/test                                    25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ These files are on test.example already and would be replaced:               │
+│                                                                              │
+│   notes.txt                                (NOTES.TXT;3)                     │
+│                                                                              │
+│ 1 file to put in all; Y replaces them, any other key puts nothing.           │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Replace them? (Y/N) [N]:
+ CHOOSE  Y do it   any other key: do nothing   Up/Down scroll

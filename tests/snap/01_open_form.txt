@@ -1,0 +1,24 @@
+ VFTP  Open a connection                                      25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Protocol           SFTP  (FTP and SCP come later)                            │
+│ Host                                                                         │
+│ Port               22                                                        │
+│ User               test                                                      │
+│ Password                                                                     │
+│ Key file                                                                     │
+│ Key passphrase                                                               │
+│ Remote directory                                                             │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│ The server's key is checked against known_hosts in your SSH directory.       │
+│ The server's name or address.                                                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ FORM  Up/Down Tab Return: field to field   Ctrl/U erase   Ctrl/A overstrike
+ COMMANDS  Do or Enter: connect   F10 cancel   Help

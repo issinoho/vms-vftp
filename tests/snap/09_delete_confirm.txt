@@ -1,0 +1,24 @@
+ VFTP  Delete from the server: /home/test                     25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ This will be deleted:                                                        │
+│                                                                              │
+│   README.md                                                                  │
+│                                                                              │
+│ There is no undo on the server.                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Delete them? (Y/N) [N]:
+ CHOOSE  Y do it   any other key: do nothing   Up/Down scroll

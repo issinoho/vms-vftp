@@ -1,0 +1,24 @@
+ VFTP  kit.zip                                                25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Path        test.example:/home/test/kit.zip                                  │
+│ Size        2000 bytes                                                       │
+│ Type        file                                                             │
+│ Permissions -rw-r--r-- (0644)                                                │
+│ Owner       test                                                             │
+│ Get as      binary, undefined records                                        │
+│ Modified    24-OCT-2026 18:02                                                │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ ATTRIBUTES
+ COMMANDS  Any key returns

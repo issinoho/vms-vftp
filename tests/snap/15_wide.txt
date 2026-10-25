@@ -1,0 +1,30 @@
+ VFTP  sftp test@test.example:/home/test                                                                          25-OCT-2026 10:12
+┌ LOCAL STUB$DKA0:[USERS.TEST] ───────────────────────────────────┬ REMOTE /home/test ─────────────────────────────────────────────┐
+│ [-]  (parent directory)                                         │ ..   (parent directory)                                        │
+│ SSH.DIR;1               <DIR> 21-OCT-2026 09:30 (RWE,RWE,RE,E)  │ data/                        <DIR> 24-OCT-2026 18:02 drwxr-xr-x│
+│ WORK.DIR;1              <DIR> 21-OCT-2026 09:30 (RWE,RWE,RE,E)  │ README.md                       10 24-OCT-2026 18:02 -rw-r--r--│
+│ KIT.BCK;1                   3 21-OCT-2026 09:30 (RWED,RWED,RE,) │ kit.zip                       2000 24-OCT-2026 18:02 -rw-r--r--│
+│ LOGIN.COM;1                 1 21-OCT-2026 09:30 (RWED,RWED,RE,) │ notes.txt                       23 24-OCT-2026 18:02 -rw-r--r--│
+│ NOTES.TXT;2                 1 22-OCT-2026 09:30 (RWED,RWED,RE,) │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+│                                                                 │                                                                │
+├─────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────────────┤
+│ 3 files 2033 bytes                                                                            Mode AUTO   SFTP test@test.example │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ Logged in to test.example as test
+ COMMANDS  PF1 GOLD  Tab other pane  Return open  Left up  Jump  Help  F10 exit

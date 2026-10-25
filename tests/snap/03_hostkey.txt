@@ -1,0 +1,24 @@
+ VFTP  A server VFTP has not seen before                      25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ The authenticity of test.example (port 22) can't be established:             │
+│ Its key is not in known_hosts (STUB$DKA0:[USERS.TEST.SSH]KNOWN_HOSTS.)       │
+│                                                                              │
+│   Key type      ecdsa-sha2-nistp256                                          │
+│   Fingerprint   SHA256:TESTtestTESTtestTESTtestTESTtestTESTtes               │
+│                                                                              │
+│ Check the fingerprint with the server's owner (on the server:                │
+│ ssh-keygen -l -f its host key file) before you answer Y.                     │
+│ Y adds the key to known_hosts, as ssh does, and logs in.                     │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Trust this server and connect? (Y/N) [N]:
+ CHOOSE  Y do it   any other key: do nothing   Up/Down scroll

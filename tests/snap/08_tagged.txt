@@ -1,0 +1,24 @@
+ VFTP  sftp test@test.example:/home/test                      25-OCT-2026 10:12
+┌ LOCAL STUB$DKA0:[USERS.TEST] ─────────┬ REMOTE /home/test ───────────────────┐
+│ [-]  (parent directory)               │ ..   (parent directory)              │
+│ SSH.DIR;1                 <DIR> 21-OCT│ data/                    <DIR> 24-OCT│
+│ WORK.DIR;1                <DIR> 21-OCT│ README.md                   10 24-OCT│
+│◆KIT.BCK;1                     3 21-OCT│ kit.bck                   1536 24-OCT│
+│ KIT.ZIP;1                     4 21-OCT│ kit.zip                   2000 24-OCT│
+│◆LOGIN.COM;1                   1 21-OCT│ login.com                   23 24-OCT│
+│ NOTES.TXT;3                   1 23-OCT│ notes.txt                   24 24-OCT│
+│ README.MD;1                   1 21-OCT│                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+├───────────────────────────────────────┴──────────────────────────────────────┤
+│ 5 files 10 blocks  tagged 2 (4 blocks)    Mode AUTO   SFTP test@test.example │
+└──────────────────────────────────────────────────────────────────────────────┘
+ FILE  Open Get Put Copy Delete Rename Mkdir Tag View Attr X-mode Sort Filter
+ COMMANDS  PF1 GOLD  Tab other pane  Return open  Left up  Jump  Help  F10 exit

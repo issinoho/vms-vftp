@@ -10,7 +10,7 @@ $ if f$search("build.dir") .eqs. "" then create/directory [.build]
 $! Under /STANDARD=C99 only ANSI names get the DECC$ prefix: ALL_ENTRIES maps the rest.
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES" -
          + "/INCLUDE=([.src.core],[.src.app],[.src.plat],[.src.plat.vms],[.src.plat.stub])"
-$ core = "vf_util,vf_edit,vf_screen,vf_ansi"
+$ core = "vf_util,vf_edit,vf_screen,vf_ansi,vf_pane,vf_path,vf_text"
 $ i = 0
 $ core_loop:
 $   m = f$element(i, ",", core)

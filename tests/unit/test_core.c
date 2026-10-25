@@ -7,6 +7,9 @@
 #include "vf_edit.h"
 #include "vf_screen.h"
 #include "vf_ansi.h"
+#include "vf_pane.h"
+#include "vf_path.h"
+#include "vf_text.h"
 
 static int checks, fails;
 #define CHECK(c) do { checks++; if (!(c)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
@@ -72,9 +75,118 @@ static void test_screen(void)
     CHECKS(vf_ansi_sgr(&txt, 1), "0;37;44");
 }
 
+static void test_path(void)
+{
+    char b[512];
+    vf_rjoin("/home/iain", "a.txt", b, sizeof b); CHECKS(b, "/home/iain/a.txt");
+    vf_rjoin("/", "etc", b, sizeof b); CHECKS(b, "/etc");
+    CHECK(vf_rparent("/home/iain/", b, sizeof b)); CHECKS(b, "/home");
+    CHECK(vf_rparent("/home", b, sizeof b)); CHECKS(b, "/");
+    CHECK(!vf_rparent("/", b, sizeof b)); CHECKS(b, "/");
+    CHECKS(vf_rbase("/a/b.c"), "b.c");
+    vf_lsubdir("DKA0:[IAIN]", "WORK", b, sizeof b); CHECKS(b, "DKA0:[IAIN.WORK]");
+    vf_lsubdir("DKA0:[000000]", "IAIN", b, sizeof b); CHECKS(b, "DKA0:[IAIN]");
+    CHECK(vf_lparent("DKA0:[IAIN.WORK]", b, sizeof b)); CHECKS(b, "DKA0:[IAIN]");
+    CHECK(vf_lparent("DKA0:[IAIN]", b, sizeof b)); CHECKS(b, "DKA0:[000000]");
+    CHECK(!vf_lparent("DKA0:[000000]", b, sizeof b));
+    CHECK(vf_lparent("DKA0:[A.B^.C]", b, sizeof b)); CHECKS(b, "DKA0:[A]");
+    vf_ldirname("SRC.DIR;1", b, sizeof b); CHECKS(b, "SRC");
+    vf_lfile("DKA0:[IAIN]", "X.TXT;2", b, sizeof b); CHECKS(b, "DKA0:[IAIN]X.TXT;2");
+    CHECK(!vf_local_name("notes.txt", 1, b, sizeof b)); CHECKS(b, "notes.txt");
+    CHECK(vf_local_name("my file.tar.gz", 1, b, sizeof b)); CHECKS(b, "my^_file^.tar.gz");
+    CHECK(!vf_local_name("build_vms.com;3", 1, b, sizeof b)); CHECKS(b, "build_vms.com");
+    vf_local_name(".profile", 1, b, sizeof b); CHECKS(b, ".profile");
+    CHECK(vf_local_name("my file.tar.gz", 0, b, sizeof b)); CHECKS(b, "MY_FILE_TAR.GZ");
+    CHECK(!vf_local_name("notes.txt", 0, b, sizeof b)); CHECKS(b, "NOTES.TXT");
+    vf_remote_name("NOTES.TXT;1", b, sizeof b); CHECKS(b, "notes.txt");
+    vf_remote_name("LICENSE.;1", b, sizeof b); CHECKS(b, "license");
+    vf_remote_name("ReadMe.md;2", b, sizeof b); CHECKS(b, "ReadMe.md");
+    vf_remote_name("my^_file^.tar.gz;1", b, sizeof b); CHECKS(b, "my file.tar.gz");
+    CHECK(vf_text_type("notes.txt", 0));
+    CHECK(vf_text_type("BUILD.COM;1", 0));
+    CHECK(!vf_text_type("kit.pcsi", 0));
+    CHECK(!vf_text_type("Makefile", 0));
+    CHECK(vf_text_type("a.foo", "BAR, .foo"));
+}
+
+static char recs[8][64];
+static int nrecs;
+static unsigned int rec(void *ctx, const char *r, int len)
+{
+    (void) ctx;
+    if (nrecs < 8) { memcpy(recs[nrecs], r, (size_t) len); recs[nrecs][len] = 0; nrecs++; }
+    return 1;
+}
+
+static void test_text(void)
+{
+    static vf_lines l;
+    vf_lines_init(&l);
+    nrecs = 0;
+    vf_lines_feed(&l, "one\r\ntw", 7, rec, 0);
+    vf_lines_feed(&l, "o\n\nlast", 7, rec, 0);
+    CHECK(nrecs == 3);
+    vf_lines_end(&l, rec, 0);
+    CHECK(nrecs == 4);
+    CHECKS(recs[0], "one"); CHECKS(recs[1], "two"); CHECKS(recs[2], ""); CHECKS(recs[3], "last");
+}
+
+static void add(vf_pane *p, const char *name, int dir, unsigned int blocks, int day)
+{
+    vf_entry e;
+    memset(&e, 0, sizeof e);
+    vf_strlcpy(e.name, name, sizeof e.name);
+    e.is_dir = dir; e.blocks = blocks; e.size = blocks * 512ULL; e.has_size = 1; e.has_time = 1;
+    e.mtime.y = 2026; e.mtime.m = 10; e.mtime.d = day;
+    vf_pane_add(p, &e);
+}
+
+static void test_pane(void)
+{
+    vf_pane p;
+    char b[256];
+    int n, f, d;
+    unsigned long long by;
+    unsigned int bl;
+    vf_entry par;
+    vf_pane_init(&p, 1);
+    memset(&par, 0, sizeof par); par.is_parent = 1; par.is_dir = 1; vf_strlcpy(par.name, "[-]", sizeof par.name);
+    vf_pane_add(&p, &par);
+    add(&p, "NOTES.TXT;1", 0, 14, 25);
+    add(&p, "NOTES.TXT;2", 0, 15, 25);
+    add(&p, "A.COM;1", 0, 2, 1);
+    add(&p, "WORK.DIR;1", 1, 1, 20);
+    vf_pane_rebuild(&p);
+    CHECK(p.nvis == 5);
+    CHECKS(p.e[p.vis[0]].name, "[-]");
+    CHECKS(p.e[p.vis[1]].name, "WORK.DIR;1");
+    CHECKS(p.e[p.vis[2]].name, "A.COM;1");
+    CHECKS(p.e[p.vis[3]].name, "NOTES.TXT;2");
+    p.sort = VF_SORT_SIZE; vf_pane_rebuild(&p);
+    CHECKS(p.e[p.vis[2]].name, "NOTES.TXT;2");
+    vf_strlcpy(p.filter, "*.COM", sizeof p.filter); vf_pane_rebuild(&p);
+    CHECK(p.nvis == 3);
+    vf_strlcpy(p.filter, "*", sizeof p.filter); vf_pane_rebuild(&p);
+    n = vf_pane_tag_match(&p, "NOTES.*", 1);
+    CHECK(n == 2);
+    vf_pane_tagged(&p, &n, &by, &bl); CHECK(n == 2 && bl == 29);
+    vf_pane_totals(&p, &f, &d, &by, &bl); CHECK(f == 3 && d == 1 && bl == 31);
+    vf_pane_goto(&p, "a.com;1"); CHECKS(vf_pane_cur(&p)->name, "A.COM;1");
+    vf_pane_row(&p, vf_pane_cur(&p), 36, 2026, b, sizeof b);
+    CHECKS(b, "A.COM;1                     2  1-OCT");
+    vf_pane_free(&p);
+    CHECKS(vf_fmt_bytes(99999, b, sizeof b), "99999");
+    CHECKS(vf_fmt_bytes(123456, b, sizeof b), "121K");
+    CHECKS(vf_fmt_bytes(3500000, b, sizeof b), "3.3M");
+    CHECKS(vf_fmt_perms(0750, 1, 0, b, sizeof b), "drwxr-x---");
+}
+
 int main(void)
 {
     test_util();
+    test_path();
+    test_text();
+    test_pane();
     test_edit();
     test_screen();
     printf("test_core: %d checks, %d failed\n", checks, fails);
