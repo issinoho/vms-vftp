@@ -34,3 +34,18 @@ account's known_hosts is VSI ssh's own `USER$ROOT:[IAIN.SSH]KNOWN_HOSTS.`
 and logs in to GitHub on both nodes. Each node's sshd offers publickey, password
 and keyboard-interactive. On x86 sshd listens on 2222 inside the node too (service
 SSHD2222; SSHD22 and FTP are disabled); IA64's sshd is on 22.
+
+## N4. How VSI's SFTP server moves VMS files (2026-10-25, IA64, from Linux)
+
+`probes/probe_sftp_files.com` makes the files; Linux `sftp` fetches them.
+- A text file (VFC, print carriage control, 3 records) downloads as LF lines,
+  43 bytes, but `ls -l` (and so SFTP's size attribute) says 52: the on-disk bytes
+  with record headers. **The listed size of a VMS text file is not the number of
+  bytes a download gives**: progress must allow for it and a short read is not an
+  error.
+- A name without a version gets the highest version; `name;1` gets that version.
+- An image (fixed 512-byte records, 92 blocks) downloads as its raw bytes, 47104.
+- An upload always becomes a Stream_LF file, whatever the source was.
+So a VMS server handles text conversion itself: VFTP sends and receives LF lines
+and leaves record formats to the server. Writing VMS files locally is VFTP's job
+(D6), through RMS as VTREE's copy does (vms-vtree `vtp_copy`, its N9/N10).
