@@ -175,6 +175,16 @@ static void test_pane(void)
     vf_pane_row(&p, vf_pane_cur(&p), 36, 2026, b, sizeof b);
     CHECKS(b, "A.COM;1                     2  1-OCT");
     vf_pane_free(&p);
+    /* remote: a Unix directory gets "/", a VMS server's SUB.DIR;1 is shown as it is (N5) */
+    vf_pane_init(&p, 0);
+    add(&p, "data", 1, 0, 20);
+    add(&p, "SUB.DIR;1", 1, 0, 20);
+    vf_pane_rebuild(&p);
+    vf_pane_goto(&p, "data"); vf_pane_row(&p, vf_pane_cur(&p), 36, 2026, b, sizeof b);
+    CHECK(!strncmp(b, "data/ ", 6));
+    vf_pane_goto(&p, "SUB.DIR;1"); vf_pane_row(&p, vf_pane_cur(&p), 36, 2026, b, sizeof b);
+    CHECK(!strncmp(b, "SUB.DIR;1 ", 10));
+    vf_pane_free(&p);
     CHECKS(vf_fmt_bytes(99999, b, sizeof b), "99999");
     CHECKS(vf_fmt_bytes(123456, b, sizeof b), "121K");
     CHECKS(vf_fmt_bytes(3500000, b, sizeof b), "3.3M");

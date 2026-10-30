@@ -2,6 +2,7 @@
 # own sshd, and @RDIR@, the server-side scratch directory [.LIVE.REMOTE]).
 # "<secs> <label> | <keys>". No password is ever typed: the logins are the test
 # key (to this node) and the account's key to GitHub, which has no SFTP.
+# Ctrl/C (\x03) cancels a transfer; it does nothing on the main screen, F10 exits.
 # PTYDRIVE knows \r \e \\ \xHH only: Tab is \x09. Pick files by filter and GOLD
 # Down (the last entry), not by counting rows: [.LIVE] holds directories too.
 2 dcl | set terminal/width=80/page=24\r
@@ -30,12 +31,19 @@
 10 connect again | \e[29~
 8 trust | y
 2 remote down | \e[B
+1 get big | g
+4 cancel get | \x03
+2 remote down1 | \e[B
 6 get bin | g
 2 remote down2 | \e[B
 6 get txt | g
 4 view remote | v
 2 view remote back | \x20
 2 to local | \x09
+2 local big | f\x05\x15BIG.*\r
+2 local big last | \eOP\e[B
+1 put big | p
+4 cancel put | \x03
 2 local filter | f\x05\x15*.TXT\r
 2 local last | \eOP\e[B
 6 put txt | p

@@ -253,7 +253,10 @@ void vf_pane_row(const vf_pane *p, const vf_entry *e, int width, int year, char 
     nw = width - 1 - 6 - 1 - (int) strlen(wide ? "25-OCT-2026 10:01" : "25-OCT") - (int) strlen(extra);
     if (nw < 8) nw = 8;
     vf_strlcpy(name, e->name, sizeof name);
-    if (!p->local && e->is_dir) vf_strlcat(name, "/", sizeof name);
+    if (!p->local && e->is_dir) {                  /* "data/"; a VMS server's SUB.DIR;1 as it is */
+        const char *dot = strrchr(name, '.');
+        if (!dot || vf_strncasecmp(dot, ".DIR;", 5)) vf_strlcat(name, "/", sizeof name);
+    }
     if ((int) strlen(name) > nw) { name[nw - 1] = '>'; name[nw] = '\0'; }   /* cut, marked */
     snprintf(buf, size, "%-*s %6s %-*s%s", nw, name, sz, wide ? 17 : 6, date, extra);
     if ((int) strlen(buf) > width) buf[width] = '\0';

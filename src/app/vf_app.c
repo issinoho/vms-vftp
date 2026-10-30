@@ -906,7 +906,7 @@ static void help_build(vf_app *a)
     text_add(a, "  X  Transfer mode             AUTO, ASCII, BINARY");
     text_add(a, "  S  Sort   F, Find  Filter    GOLD V every version / highest only (local)");
     text_add(a, "  GOLD W, Ctrl/W               read both panes again; redraw");
-    text_add(a, "  F10, Ctrl/Z                  exit (a transfer: F10 or Ctrl/Z cancels it)");
+    text_add(a, "  F10, Ctrl/Z                  exit (a transfer: F10, Ctrl/Z, Ctrl/C cancel)");
     text_add(a, "TRANSFER MODE (X)");
     text_add(a, "  AUTO  Put: text if the file has variable or VFC records with carriage");
     text_add(a, "        control, each record sent as a line. Get: text if the name's type");

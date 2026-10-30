@@ -71,6 +71,13 @@ static void tt_write(void *ctx, const char *bytes, int len)
     }
 }
 
+/* Ctrl/C: without an out-of-band AST the terminal driver turns it into Ctrl/Y
+   ("Interrupt") and VFTP never sees it, so a transfer could not be cancelled
+   with it (N6). The AST only notes it; vfp_key hands it on as key 3. Ctrl/Y is
+   left alone, so a hung VFTP can still be interrupted. */
+static volatile int ctrlc_hit;
+static void ctrlc_ast(void *table) { (void) table; ctrlc_hit = 1; }
+
 static struct { unsigned int link; void (*handler)(void); unsigned int argc; unsigned int *status;
                 unsigned int st; } exit_block;
 
@@ -106,6 +113,10 @@ unsigned int vfp_start(vfp_session *s)
     st = smg$create_virtual_keyboard(&kb, 0, 0, 0, 0);
     if (!(st & 1)) { smg$delete_pasteboard(&pb, &one); sys$dassgn(ttchan); return st; }
     smg$set_broadcast_trapping(&pb, 0, 0);
+    {
+        unsigned int mask = 1u << 3;               /* Ctrl/C */
+        smg$set_out_of_band_asts(&pb, &mask, (void (*)()) ctrlc_ast, 0);
+    }
     mode = getenv("VFTP$DISPLAY");                 /* MONO for a terminal without colour */
     colour = !(mode && (mode[0] == 'M' || mode[0] == 'm'));
     scr_rows = rows; scr_cols = cols;
@@ -125,6 +136,10 @@ void vfp_stop(void)
     if (!started) return;
     started = 0;
     vf_ansi_end(tt_write, 0);
+    {
+        unsigned int none = 0;
+        smg$set_out_of_band_asts(&pb, &none, 0, 0);
+    }
     smg$disable_broadcast_trapping(&pb);
     smg$delete_pasteboard(&pb, &one);
     smg$delete_virtual_keyboard(&kb);
@@ -155,6 +170,7 @@ int vfp_key(int timeout)
     unsigned short term = 0;
     unsigned int st;
     if (!started) return VK_TIMEOUT;
+    if (ctrlc_hit) { ctrlc_hit = 0; return 3; }
     st = smg$read_keystroke(&kb, &term, 0, &timeout, 0, 0, 0);
     if (st == SS$_TIMEOUT) return VK_TIMEOUT;
     if (st == SMG$_EOF) return VK_CTRL_Z;

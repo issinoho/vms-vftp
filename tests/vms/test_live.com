@@ -29,6 +29,21 @@ $ create 'remote'r.txt
 A variable-length text file on the server.
 Its second line.
 $ copy [.live]f.bin 'remote'r.bin
+$! BIG.BIN: F.BIN (fixed 512, 5 blocks) doubled 12 times, 10 MB, on both sides, to
+$! see progress and cancel (and that a cancelled Put leaves the server's BIG.BIN;1)
+$! (COPY A,A A would read the new, empty A as its second input: use two names)
+$ copy [.live]f.bin [.live]big1.bin
+$ n = 0
+$ double:
+$ copy [.live]big1.bin,[.live]big1.bin [.live]big2.bin
+$ delete/nolog [.live]big1.bin;*
+$ rename [.live]big2.bin [.live]big1.bin
+$ n = n + 1
+$ if n .lt. 12 then goto double
+$ rename [.live]big1.bin [.live]big.bin
+$ copy [.live]big.bin 'remote'big.bin
+$ checksum/algorithm=md5 [.live]big.bin
+$ big_md5 = checksum$checksum
 $ define/job sys$login 'live'
 $ define/job vftp$log 'live'vftp.log
 $ build = here - "]" + ".BUILD]"
@@ -48,6 +63,11 @@ $ directory/size/date 'ssh','remote'
 $ write sys$output "==== downloads against their sources"
 $ differences/mode=hex 'live'r.bin 'live'f.bin
 $ differences 'live'r.txt 'remote'r.txt
+$ write sys$output "==== BIG.BIN after the cancelled Get and Put: one version each, as before"
+$ directory/size=all/date 'live'big.bin;*,'remote'big.bin;*
+$ checksum/algorithm=md5 'remote'big.bin;1
+$ if checksum$checksum .eqs. big_md5 then write sys$output "LIVE: server BIG.BIN;1 unchanged"
+$ if checksum$checksum .nes. big_md5 then write sys$output "LIVE: server BIG.BIN;1 CHANGED"
 $ write sys$output "==== known_hosts: this node added?"
 $ search/statistics 'ssh'known_hosts. "localhost"
 $ write sys$output "==== VFTP log"

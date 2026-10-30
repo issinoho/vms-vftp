@@ -23,7 +23,7 @@ node=$1 op=$2; shift 2
 read -r _ ARCH HOST PORT USER WORKDIR SFTPDIR < <(awk -v n="$node" '$1==n' "$conf") || true
 [ -n "${HOST:-}" ] || { echo "vms.sh: unknown node '$node' (see $conf)" >&2; exit 2; }
 
-ssh_opts=(-i "$key" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30)
+ssh_opts=(-i "$key" -o BatchMode=yes -o ConnectTimeout=60 -o ServerAliveInterval=30)
 
 sftp_batch() {  # sftp_batch <commands...>
     printf '%s\n' "$@" | sftp -P "$PORT" "${ssh_opts[@]}" -b - "$USER@$HOST" 2>&1 >/dev/null |

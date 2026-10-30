@@ -70,3 +70,23 @@ directory is `[.LIVE.SSH]`: the real known_hosts is copied there and never writt
 - Mkdir, rename of `t.txt;2` to `moved.txt` and delete of `t.txt;1` work and are logged.
 Still to see: a transfer between the two nodes (needs the key let in from the other
 node), Put of a large file with progress and cancel, and a Unix SFTP server.
+
+## N6. Progress, cancel, and Ctrl/C (2026-10-30, tools/live.sh)
+
+`test_live.com` makes a 10 MB BIG.BIN (F.BIN, fixed 512, doubled 12 times) on both
+sides. `COPY A,A A` does not double A: its second input is the new, empty version.
+- **Ctrl/C did not reach VFTP.** With no out-of-band AST the terminal driver turns
+  it into Ctrl/Y: "Interrupt" was echoed over the progress bar and the Get ran on,
+  and keys typed during it were read and dropped by the progress loop. VFTP now
+  traps Ctrl/C with SMG$SET_OUT_OF_BAND_ASTS (Ctrl/Y is left to DCL).
+- With that, Get and Put are both cancelled by Ctrl/C part way (4-36%). Over
+  localhost, Get runs at 1.5 MB/s on IA64 and 4.3-4.7 MB/s on x86 (where 10 MB
+  finished before a Ctrl/C at 4 s; the step now waits 1 s), Put at 0.5-1.4 MB/s. No partial local file is left, and **the
+  cancelled Put's delete of `big.bin` removed only the new, partial version: the
+  server's BIG.BIN;1 is unchanged (MD5).** The VMS server deletes the highest version.
+- x86 under load: each SSH connection starts a new SSHD222_* job, and with a
+  compute-bound process at the same priority the banner took over 15 s, which
+  vms.sh's ConnectTimeout turned into "timed out during banner exchange"; it is
+  now 60 s. Once the sshd master sat in a loop for 95 minutes (seen by SHOW
+  PROCESS, stopped by the user). After a full live run no sshd job outlives it
+  (`probes/sshd_socks.com`), so VFTP's sessions do close.

@@ -18,7 +18,7 @@
 │   X  Transfer mode             AUTO, ASCII, BINARY                           │
 │   S  Sort   F, Find  Filter    GOLD V every version / highest only (local)   │
 │   GOLD W, Ctrl/W               read both panes again; redraw                 │
-│   F10, Ctrl/Z                  exit (a transfer: F10 or Ctrl/Z cancels it)   │
+│   F10, Ctrl/Z                  exit (a transfer: F10, Ctrl/Z, Ctrl/C cancel) │
 └───────────────────────────────────────────────────────────────────── more ───┘
  HELP  Up/Down Prev/Next scroll
  COMMANDS  Any other key returns
