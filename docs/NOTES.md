@@ -49,3 +49,24 @@ SSHD2222; SSHD22 and FTP are disabled); IA64's sshd is on 22.
 So a VMS server handles text conversion itself: VFTP sends and receives LF lines
 and leaves record formats to the server. Writing VMS files locally is VFTP's job
 (D6), through RMS as VTREE's copy does (vms-vtree `vtp_copy`, its N9/N10).
+
+## N5. VFTP against each node's own sshd (2026-10-30, tools/live.sh, both nodes)
+
+The live test logs in to the node's own sshd with a key made for the test
+(`tools/live_key`, git-ignored; in the account's authorized_keys as
+`restrict,from="127.0.0.1,::1"`). While VFTP runs, SYS$LOGIN is `[.LIVE]`, so its SSH
+directory is `[.LIVE.SSH]`: the real known_hosts is copied there and never written.
+- The Open form finds the key as `[.SSH]id_ed25519.` under SYS$LOGIN. The unknown
+  host key is shown and refused with N, added with Y (`[localhost]:2222` for a port
+  other than 22, `localhost` on 22, as ssh writes), and the key login works.
+- A relative Remote directory (`vms_vftp/live/remote`) resolves from the login
+  directory, as an absolute one (`/DISK$SYSDUMP/...`) does.
+- The server lists names with versions (`R.TXT;1`), directories as `SUBDIR.DIR;1`.
+- Get of a 5-block binary gives 2560 bytes, the same as the source (DIFFERENCES/HEX).
+  Get of a 2-line text file listed as 62 bytes gives 60 (N4) and the same records.
+- **Put of a name the server has makes a new version there** (`t.txt;1`, `t.txt;2`).
+  Nothing is replaced, so VFTP's replace prompt correctly does not fire: it looks up
+  `t.txt` and the server lists `t.txt;1`.
+- Mkdir, rename of `t.txt;2` to `moved.txt` and delete of `t.txt;1` work and are logged.
+Still to see: a transfer between the two nodes (needs the key let in from the other
+node), Put of a large file with progress and cancel, and a Unix SFTP server.

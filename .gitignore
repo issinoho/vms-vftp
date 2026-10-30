@@ -3,3 +3,4 @@ out/
 *.o
 tools/nodes.conf
 tools/__pycache__/
+tools/live_key*
