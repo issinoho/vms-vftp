@@ -130,6 +130,15 @@ int main(void)
     CHECK(vfp_list(dir, 0, lister, 0) & 1);
     CHECK(count == 5);                                  /* T.TXT;2, RENAMED, F, W, SUB */
 
+    {
+        /* a new directory denies its owner delete; vfp_delete gives it (N13 of VTREE) */
+        char sub[600];
+        snprintf(sub, sizeof sub, "%sSUB.DIR;1", dir);
+        st = vfp_delete(sub);
+        if (!(st & 1)) printf("delete %s: %X\n", sub, st);
+        CHECK(st & 1);
+        CHECK(!vfp_exists(sub));
+    }
     vfp_ssh_file("known_hosts", kh, sizeof kh);
     printf("known_hosts %s exists %d\n", kh, vfp_exists(kh));
     CHECK(vfp_exists(kh));

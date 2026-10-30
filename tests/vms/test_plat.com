@@ -2,9 +2,18 @@ $! test_plat.com - build and run test_plat.c (VFTP's RMS file code) in a fresh
 $! [.LIVE], then show what RMS recorded about the files it wrote.
 $ set noon
 $ if f$search("live.dir") .eqs. "" then create/directory [.live]
-$ if f$search("[.live.sub]*.*;*") .nes. "" then delete/nolog [.live.sub]*.*;*
-$ if f$search("[.live]sub.dir") .nes. "" then set security/protection=o:rwed [.live]sub.dir
-$ if f$search("[.live]*.*;*") .nes. "" then delete/nolog [.live]*.*;*
+$! empty [.LIVE]: directories first (they deny their owner delete), deepest first
+$ clean:
+$ d = f$search("[.live...]*.dir;1")
+$ if d .eqs. "" then goto clean_files
+$ set security/protection=o:rwed 'd'
+$ goto clean
+$ clean_files:
+$ if f$search("[.live...]*.*;*") .eqs. "" then goto cleaned
+$ delete/nolog [.live...]*.*;*
+$ if f$search("[.live...]*.*;*") .nes. "" then delete/nolog [.live...]*.*;*
+$ if f$search("[.live...]*.*;*") .nes. "" then delete/nolog [.live...]*.*;*
+$ cleaned:
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES/NAMES=(AS_IS,SHORTENED)" -
          + "/INCLUDE=([.src.core],[.src.app],[.src.net],[.src.plat],[.src.plat.vms])"
 $ cc'cflags'/object=[.build]test_plat.obj [.tests.vms]test_plat.c

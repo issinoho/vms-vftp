@@ -18,6 +18,7 @@
 #include <jpidef.h>
 #include <syidef.h>
 #include <dvidef.h>
+#include <ossdef.h>
 #include <smgdef.h>
 #include <smgmsg.h>
 #include <smg$routines.h>
@@ -478,10 +479,51 @@ static unsigned int erase(const char *spec)
     return sys$erase(&fab, 0, 0);
 }
 
+static unsigned int prot_get(const char *spec, unsigned short *prot)
+{
+    struct dsc$descriptor_s cls, obj;
+    unsigned int p = 0;
+    unsigned short pl = 0;
+    ile3 it[2];
+    unsigned int st;
+    dsc(&cls, "FILE", 4);
+    dsc(&obj, spec, (unsigned short) strlen(spec));
+    ile(&it[0], OSS$_PROTECTION, &p, 2, &pl);     /* 2 bytes, not 4 (VTREE N4) */
+    memset(&it[1], 0, sizeof it[1]);
+    st = sys$get_security(&cls, &obj, 0, 0, it, 0, 0);
+    *prot = (unsigned short) p;
+    return st;
+}
+
+static unsigned int prot_set(const char *spec, unsigned short prot)
+{
+    struct dsc$descriptor_s cls, obj;
+    unsigned int p = prot;
+    unsigned short pl = 0;
+    ile3 it[2];
+    dsc(&cls, "FILE", 4);
+    dsc(&obj, spec, (unsigned short) strlen(spec));
+    ile(&it[0], OSS$_PROTECTION, &p, 2, &pl);
+    memset(&it[1], 0, sizeof it[1]);
+    return sys$set_security(&cls, &obj, 0, 0, it, 0, 0);
+}
+
 unsigned int vfp_delete(const char *spec)
 {
+    unsigned int st;
+    unsigned short prot;
+    size_t n = strlen(spec);
     if (!exact_spec(spec)) return 0x1004u;
-    return erase(spec);
+    st = erase(spec);
+    /* A new directory denies its owner delete: give it, as VTREE's prune does
+       (its N13), and put it back if the delete still fails (e.g. not empty). */
+    if (st == RMS$_PRV && n > 6 && !vf_strcasecmp(spec + n - 6, ".DIR;1")
+        && (prot_get(spec, &prot) & 1) && (prot & 0x0080)
+        && (prot_set(spec, (unsigned short) (prot & ~0x0080)) & 1)) {
+        st = erase(spec);
+        if (!(st & 1)) prot_set(spec, prot);
+    }
+    return st;
 }
 
 unsigned int vfp_rename(const char *from, const char *to)

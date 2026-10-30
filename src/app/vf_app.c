@@ -271,8 +271,11 @@ static void login(vf_app *a)
         vf_strlcpy(e, vfr_error(a->rem), sizeof e);
         logf_("LOGIN %s@%s:%d by %s FAILED: %s", a->user, a->host, a->port, how, e);
         disconnect(a, "login failed");
-        form_fail(a, *how == 'p' ? FF_PASSWORD : FF_KEY, "Login refused: %s (the server offers %s)",
-                  e, methods);
+        if (st == VFR_AUTH)
+            form_fail(a, *how == 'p' ? FF_PASSWORD : FF_KEY, "Login refused: %s (the server offers %s)",
+                      e, methods);
+        else
+            form_fail(a, FF_HOST, "Logged in, but the server gave no SFTP: %s", e);
         return;
     }
     logf_("LOGIN %s@%s:%d by %s", a->user, a->host, a->port, how);
