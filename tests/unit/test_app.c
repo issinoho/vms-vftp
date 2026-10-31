@@ -103,6 +103,51 @@ static void test_connect(void)
     CHECK(!strstr(stub_log(), "secret") && !strstr(stub_log(), "wrong"));
 }
 
+/* FTP (D10): the port follows the protocol; no password goes in clear unless the
+   user says Y; FTP has no key login */
+static void test_ftp_login(void)
+{
+    vf_app *a = &app;
+    start(24, 80, 0);
+    key(a, VK_UP);                               /* Host -> Protocol */
+    CHECK(a->fcur == FF_PROTO);
+    erase(a); type(a, "ftp");
+    key(a, VK_DOWN);
+    CHECKS(a->fv[FF_PROTO], "FTP");
+    CHECKS(a->fv[FF_PORT], "21");               /* followed the protocol */
+    erase(a); type(a, "test.example");
+    snap(a, "16_ftp_form");
+    key(a, VK_DO);                               /* no password: FTP needs one */
+    CHECK(a->mode == M_FORM && a->fcur == FF_PASSWORD && !a->rem);
+    CHECK(strstr(a->form_err, "FTP logs in with a password") != 0);
+    type(a, "secret");
+    key(a, VK_DO);
+    CHECK(a->mode == M_CONFIRM && a->ask == ASK_CLEARPW);
+    snap(a, "17_ftp_clear_password");
+    key(a, VK_RETURN);                           /* the default: No */
+    CHECK(a->mode == M_FORM && !a->rem && a->fv[FF_PASSWORD][0] == '\0');
+    CHECK(strstr(a->form_err, "password was not sent") != 0);
+    CHECK(!strstr(stub_log(), "LOGIN test@test.example:21"));
+    type(a, "secret");
+    key(a, VK_DO);
+    CHECK(a->ask == ASK_CLEARPW);
+    key(a, 'Y');
+    CHECK(a->mode == M_MAIN && a->rem && a->proto == VFR_FTP);
+    CHECKS(a->pane[PANE_REMOTE].dir, "/home/test");
+    CHECK(strstr(stub_log(), "CLEAR PASSWORD agreed for test@test.example:21") != 0);
+    CHECK(strstr(stub_log(), "LOGIN test@test.example:21 by password") != 0);
+    CHECK(!strstr(stub_log(), "secret"));
+    /* back to SFTP: the port follows again; a typed port stays */
+    key(a, 'O');
+    { int i; for (i = 0; i < FF_COUNT; i++) key(a, VK_UP); }   /* to the top: Protocol */
+    erase(a); type(a, "sftp"); key(a, VK_DOWN);
+    CHECKS(a->fv[FF_PORT], "22");
+    key(a, VK_DOWN); erase(a); type(a, "2222"); key(a, VK_UP); key(a, VK_UP);
+    erase(a); type(a, "FTP"); key(a, VK_DOWN);
+    CHECKS(a->fv[FF_PORT], "2222");
+    key(a, VK_F10);
+}
+
 static void test_get_put(void)
 {
     vf_app *a = &app;
@@ -322,6 +367,7 @@ int main(void)
     test_connect();
     test_get_put();
     test_cancel();
+    test_ftp_login();
     test_manage();
     test_screens();
     vf_app_free(&app);

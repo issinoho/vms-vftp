@@ -1,6 +1,7 @@
-/* vf_remote_stub.c - vf_remote.h for the Linux tests: an SFTP server in memory
-   at test.example (user "test", password "secret" or the stub's key file),
-   whose key known_hosts may or may not know (stub_trust, stub_change_key). */
+/* vf_remote_stub.c - vf_remote.h for the Linux tests: a server in memory at
+   test.example (user "test", password "secret" or the stub's key file): SFTP on
+   port 22, whose key known_hosts may or may not know (stub_trust,
+   stub_change_key), and the same files by FTP on port 21, with no TLS. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,7 @@ typedef struct { char path[256]; int is_dir; char *data; int len; unsigned int p
 static rnode srv[MAXR];
 static int trusted, changed;
 
-struct vf_remote { char err[256]; int logged_in; };
+struct vf_remote { char err[256]; int logged_in; int ftp; };
 struct vfr_file { vf_remote *r; rnode *n; int pos, writing; char *buf; int len; char path[256]; };
 
 static rnode *rfind(const char *path)
@@ -85,14 +86,14 @@ void stub_remote_reset(void) { remote_reset(); }   /* called by stub_reset */
 unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **r, vfr_hostkey *hk,
                          char *err, int errsz)
 {
-    (void) proto;
     *r = 0;
-    if (strcmp(host, "test.example") || port != 22) {
+    if (strcmp(host, "test.example") || port != (proto == VFR_FTP ? 21 : 22)) {
         snprintf(err, (size_t) errsz, "%s port %d: connection refused", host, port);
         return VFR_FAIL;
     }
     *r = (vf_remote *) calloc(1, sizeof **r);
     memset(hk, 0, sizeof *hk);
+    if (proto == VFR_FTP) { (*r)->ftp = 1; hk->known = VFR_HK_MATCH; return 1; }   /* no host key */
     vf_strlcpy(hk->type, "ecdsa-sha2-nistp256", sizeof hk->type);
     vf_strlcpy(hk->fingerprint, "SHA256:TESTtestTESTtestTESTtestTESTtestTESTtes", sizeof hk->fingerprint);
     vfp_ssh_file("known_hosts", hk->file, sizeof hk->file);
@@ -109,10 +110,13 @@ unsigned int vfr_trust(vf_remote *r)
     return vfp_append_line(kh, "test.example ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAI");
 }
 
+int vfr_secure(vf_remote *r) { return r && !r->ftp; }
+int vfr_vms_paths(vf_remote *r) { (void) r; return 0; }
+
 unsigned int vfr_methods(vf_remote *r, const char *user, char *out, int size)
 {
-    (void) r; (void) user;
-    vf_strlcpy(out, "publickey,password,keyboard-interactive", (size_t) size);
+    (void) user;
+    vf_strlcpy(out, r->ftp ? "password" : "publickey,password,keyboard-interactive", (size_t) size);
     return 1;
 }
 
@@ -243,9 +247,10 @@ unsigned int vfr_replace(vf_remote *r, const char *from, const char *to)
     return 1;
 }
 
-unsigned int vfr_open_read(vf_remote *r, const char *path, vfr_file **f)
+unsigned int vfr_open_read(vf_remote *r, const char *path, int text, vfr_file **f)
 {
     rnode *n = rfind(path);
+    (void) text;
     if (!n || n->is_dir) { vf_strlcpy(r->err, "No such file", sizeof r->err); return VFR_FAIL; }
     *f = (vfr_file *) calloc(1, sizeof **f);
     (*f)->r = r; (*f)->n = n;
@@ -262,10 +267,11 @@ unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got)
     return 1;
 }
 
-unsigned int vfr_open_write(vf_remote *r, const char *path, vfr_file **f)
+unsigned int vfr_open_write(vf_remote *r, const char *path, int text, vfr_file **f)
 {
     char parent[256];
     rnode *d;
+    (void) text;
     vf_rparent(path, parent, sizeof parent);
     d = rfind(parent);
     if (!d || !d->is_dir) { vf_strlcpy(r->err, "No such file", sizeof r->err); return VFR_FAIL; }
@@ -295,4 +301,7 @@ unsigned int vfr_close(vfr_file *f)
 void vfr_keepalive(vf_remote *r) { (void) r; }
 void vfr_disconnect(vf_remote *r) { free(r); }
 const char *vfr_error(vf_remote *r) { return r ? r->err : ""; }
-const char *vfr_banner(vf_remote *r) { (void) r; return "SSH-2.0-StubSSH_1.0"; }
+const char *vfr_banner(vf_remote *r)
+{
+    return r && r->ftp ? "220 test.example FTP Server (Stub) Ready." : "SSH-2.0-StubSSH_1.0";
+}

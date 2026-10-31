@@ -87,6 +87,38 @@ void vf_ldirname(const char *entry, char *out, size_t size)
     if (p - out >= 4 && !vf_strcasecmp(p - 4, ".DIR")) p[-4] = '\0';
 }
 
+/* ---------- either kind of server ---------- */
+
+void vf_xfile(int vms, const char *dir, const char *name, char *out, size_t size)
+{
+    if (vms) vf_lfile(dir, name, out, size);
+    else vf_rjoin(dir, name, out, size);
+}
+
+void vf_xsubdir(int vms, const char *dir, const char *entry, char *out, size_t size)
+{
+    char d[256];
+    if (!vms) { vf_rjoin(dir, entry, out, size); return; }
+    vf_ldirname(entry, d, sizeof d);
+    vf_lsubdir(dir, d, out, size);
+}
+
+int vf_xparent(int vms, const char *dir, char *out, size_t size)
+{
+    return vms ? vf_lparent(dir, out, size) : vf_rparent(dir, out, size);
+}
+
+void vf_xleft(int vms, const char *dir, char *out, size_t size)
+{
+    char dev[256], body[512], *dot;
+    if (!vms) { vf_strlcpy(out, vf_rbase(dir), size); return; }
+    out[0] = '\0';
+    if (!split_dir(dir, dev, sizeof dev, body, sizeof body) || !strcmp(body, "000000") || !body[0]) return;
+    for (dot = body + strlen(body); dot > body; dot--)
+        if (dot[-1] == '.' && !(dot - 1 > body && dot[-2] == '^')) break;
+    snprintf(out, size, "%s.DIR;1", dot);
+}
+
 /* ---------- names across ---------- */
 
 static int ods2_char(int c) { return isalnum(c) || c == '_' || c == '$' || c == '-'; }

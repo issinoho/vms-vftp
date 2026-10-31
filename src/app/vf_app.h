@@ -14,12 +14,12 @@
 
 enum { M_MAIN, M_HELP, M_VIEW, M_INFO, M_FORM, M_CONFIRM };
 enum { P_NONE, P_FILTER, P_RENAME, P_MKDIR, P_TAG, P_JUMP, P_ASK };
-enum { ASK_DELETE = 1, ASK_REPLACE, ASK_HOSTKEY };
+enum { ASK_DELETE = 1, ASK_REPLACE, ASK_HOSTKEY, ASK_CLEARPW };
 enum { X_AUTO, X_ASCII, X_BINARY };
 enum { PANE_LOCAL, PANE_REMOTE };
 
 /* The Open form's fields */
-enum { FF_HOST, FF_PORT, FF_USER, FF_PASSWORD, FF_KEY, FF_PHRASE, FF_DIR, FF_COUNT };
+enum { FF_PROTO, FF_HOST, FF_PORT, FF_USER, FF_PASSWORD, FF_KEY, FF_PHRASE, FF_DIR, FF_COUNT };
 
 #define VF_FIELD 256
 #define VF_MAXOPS 4096
@@ -41,6 +41,9 @@ typedef struct {
 
     /* the connection */
     vf_remote *rem;
+    int proto;                /* VFR_SFTP, VFR_FTP */
+    int rvms;                 /* the server's paths are VMS specs (vfr_vms_paths) */
+    int clear_ok;             /* the user agreed to send this password in clear (D10) */
     char host[256], user[64], banner[128];
     int port;
     vfr_hostkey hk;

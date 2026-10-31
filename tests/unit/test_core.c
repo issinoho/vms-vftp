@@ -92,6 +92,18 @@ static void test_path(void)
     CHECK(vf_lparent("DKA0:[A.B^.C]", b, sizeof b)); CHECKS(b, "DKA0:[A]");
     vf_ldirname("SRC.DIR;1", b, sizeof b); CHECKS(b, "SRC");
     vf_lfile("DKA0:[IAIN]", "X.TXT;2", b, sizeof b); CHECKS(b, "DKA0:[IAIN]X.TXT;2");
+    /* either kind of server */
+    vf_xfile(0, "/home/a", "x.txt", b, sizeof b); CHECKS(b, "/home/a/x.txt");
+    vf_xfile(1, "USER$ROOT:[IAIN]", "x.txt;2", b, sizeof b); CHECKS(b, "USER$ROOT:[IAIN]x.txt;2");
+    vf_xsubdir(0, "/home/a", "data", b, sizeof b); CHECKS(b, "/home/a/data");
+    vf_xsubdir(1, "USER$ROOT:[IAIN]", "SUB.DIR;1", b, sizeof b); CHECKS(b, "USER$ROOT:[IAIN.SUB]");
+    vf_xsubdir(1, "USER$ROOT:[IAIN]", "^.CONFIG.DIR;1", b, sizeof b); CHECKS(b, "USER$ROOT:[IAIN.^.CONFIG]");
+    CHECK(vf_xparent(1, "USER$ROOT:[IAIN.SUB]", b, sizeof b)); CHECKS(b, "USER$ROOT:[IAIN]");
+    CHECK(vf_xparent(0, "/home/a", b, sizeof b)); CHECKS(b, "/home");
+    vf_xleft(1, "USER$ROOT:[IAIN.VMS_VFTP]", b, sizeof b); CHECKS(b, "VMS_VFTP.DIR;1");
+    vf_xleft(1, "USER$ROOT:[IAIN.^.CONFIG]", b, sizeof b); CHECKS(b, "^.CONFIG.DIR;1");
+    vf_xleft(1, "USER$ROOT:[000000]", b, sizeof b); CHECKS(b, "");
+    vf_xleft(0, "/home/a", b, sizeof b); CHECKS(b, "a");
     CHECK(!vf_local_name("notes.txt", 1, b, sizeof b)); CHECKS(b, "notes.txt");
     CHECK(vf_local_name("my file.tar.gz", 1, b, sizeof b)); CHECKS(b, "my^_file^.tar.gz");
     CHECK(!vf_local_name("build_vms.com;3", 1, b, sizeof b)); CHECKS(b, "build_vms.com");

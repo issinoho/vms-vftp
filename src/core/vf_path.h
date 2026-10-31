@@ -15,6 +15,16 @@ int  vf_rparent(const char *dir, char *out, size_t size);
 /* The last element of a path ("/a/b" -> "b"). */
 const char *vf_rbase(const char *path);
 
+/* Either kind of server: Unix paths, or VMS specs when vms (a VMS FTP server, N8,
+   whose paths are the local forms below). */
+void vf_xfile(int vms, const char *dir, const char *name, char *out, size_t size);
+/* The path of a directory entry ("data", or "SUB.DIR;1" -> "DEV:[A.SUB]"). */
+void vf_xsubdir(int vms, const char *dir, const char *entry, char *out, size_t size);
+int  vf_xparent(int vms, const char *dir, char *out, size_t size);   /* 0 at the top */
+/* The entry dir is in its parent ("/a/b" -> "b", "DEV:[A.B]" -> "B.DIR;1"), so the
+   cursor can go back to it. */
+void vf_xleft(int vms, const char *dir, char *out, size_t size);
+
 /* Local */
 /* "DEV:[A]" + "B" -> "DEV:[A.B]"; "DEV:[000000]" + "B" -> "DEV:[B]". */
 void vf_lsubdir(const char *dir, const char *name, char *out, size_t size);

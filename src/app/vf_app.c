@@ -102,7 +102,7 @@ static unsigned int read_remote(vf_app *a)
     unsigned int st;
     vf_pane_clear(p);
     if (!a->rem) { vf_pane_rebuild(p); return 1; }
-    if (vf_rparent(p->dir, up, sizeof up)) {
+    if (vf_xparent(a->rvms, p->dir, up, sizeof up)) {
         memset(&par, 0, sizeof par);
         par.is_parent = par.is_dir = 1;
         vf_strlcpy(par.name, "..", sizeof par.name);
@@ -127,6 +127,7 @@ static void form_defaults(vf_app *a)
     static const char *keys[] = { "id_ed25519", "id_ecdsa", "id_rsa" };
     int i;
     memset(a->fv, 0, sizeof a->fv);
+    vf_strlcpy(a->fv[FF_PROTO], "SFTP", VF_FIELD);
     vf_strlcpy(a->fv[FF_PORT], "22", VF_FIELD);
     vf_strlcpy(a->fv[FF_USER], a->sess.user, VF_FIELD);
     for (i = 0; a->fv[FF_USER][i]; i++)
@@ -196,11 +197,12 @@ void vf_app_free(vf_app *a)
 
 /* ---------- the Open form and logging in ---------- */
 
-static const char *labels[FF_COUNT] = { "Host", "Port", "User", "Password", "Key file",
+static const char *labels[FF_COUNT] = { "Protocol", "Host", "Port", "User", "Password", "Key file",
                                         "Key passphrase", "Remote directory" };
 static const char *hints[FF_COUNT] = {
+    "SFTP or FTP (SCP comes later). FTP sends the password in clear: you are asked.",
     "The server's name or address.",
-    "The SSH port, normally 22.",
+    "The port: SFTP normally 22, FTP 21.",
     "Your user name on the server.",
     "Leave empty to log in with the key file. Never stored (D9).",
     "A private key in OpenSSH format; empty: password only.",
@@ -219,7 +221,28 @@ static void form_open(vf_app *a)
     vf_edit_init(&a->fedit, a->fv[a->fcur]);
 }
 
-static void form_store(vf_app *a) { vf_strlcpy(a->fv[a->fcur], a->fedit.buf, VF_FIELD); }
+/* "sftp", "ftp" as typed: VFR_SFTP, VFR_FTP, 0 if neither */
+static int proto_of(const char *s)
+{
+    char t[16];
+    vf_strlcpy(t, s, sizeof t);
+    vf_trim(t);
+    if (!vf_strcasecmp(t, "SFTP")) return VFR_SFTP;
+    if (!vf_strcasecmp(t, "FTP")) return VFR_FTP;
+    return 0;
+}
+
+static void form_store(vf_app *a)
+{
+    vf_strlcpy(a->fv[a->fcur], a->fedit.buf, VF_FIELD);
+    if (a->fcur == FF_PROTO) {
+        /* the other protocol's usual port follows the protocol */
+        int pr = proto_of(a->fv[FF_PROTO]);
+        if (pr) vf_strlcpy(a->fv[FF_PROTO], pr == VFR_FTP ? "FTP" : "SFTP", VF_FIELD);
+        if (pr == VFR_FTP && !strcmp(a->fv[FF_PORT], "22")) vf_strlcpy(a->fv[FF_PORT], "21", VF_FIELD);
+        if (pr == VFR_SFTP && !strcmp(a->fv[FF_PORT], "21")) vf_strlcpy(a->fv[FF_PORT], "22", VF_FIELD);
+    }
+}
 static void form_load(vf_app *a) { vf_edit_init(&a->fedit, a->fv[a->fcur]); }
 
 static void disconnect(vf_app *a, const char *why)
@@ -246,6 +269,8 @@ static void form_fail(vf_app *a, int field, const char *fmt, ...)
     form_load(a);
 }
 
+static void clearpw_ask(vf_app *a);
+
 static void login(vf_app *a)
 {
     char methods[256], dir[VF_SPEC_MAX];
@@ -253,6 +278,12 @@ static void login(vf_app *a)
     const char *how = "";
     methods[0] = '\0';
     vfr_methods(a->rem, a->user, methods, sizeof methods);
+    if (a->fv[FF_PASSWORD][0] && !vfr_secure(a->rem) && !a->clear_ok) { clearpw_ask(a); return; }
+    if (a->proto == VFR_FTP && !a->fv[FF_PASSWORD][0]) {
+        disconnect(a, "no password");
+        form_fail(a, FF_PASSWORD, "FTP logs in with a password (a key file is for SFTP)");
+        return;
+    }
     if (a->fv[FF_PASSWORD][0]) {
         how = "password";
         st = vfr_login_password(a->rem, a->user, a->fv[FF_PASSWORD]);
@@ -275,10 +306,13 @@ static void login(vf_app *a)
         if (st == VFR_AUTH)
             form_fail(a, *how == 'p' ? FF_PASSWORD : FF_KEY, "Login refused: %s (the server offers %s)",
                       e, methods);
+        else if (a->proto == VFR_FTP)
+            form_fail(a, FF_HOST, "Logged in, but then: %s", e);
         else
             form_fail(a, FF_HOST, "Logged in, but the server gave no SFTP: %s", e);
         return;
     }
+    a->rvms = vfr_vms_paths(a->rem);
     logf_("LOGIN %s@%s:%d by %s", a->user, a->host, a->port, how);
     st = vfr_realpath(a->rem, a->fv[FF_DIR][0] ? a->fv[FF_DIR] : ".", dir, sizeof dir);
     if (!(st & 1)) {
@@ -292,6 +326,25 @@ static void login(vf_app *a)
     a->act = PANE_REMOTE;
     a->mode = M_MAIN;
     a->last_alive = vfp_clock();
+}
+
+/* D10: no TLS, so the password would cross the network as it is */
+static void clearpw_ask(vf_app *a)
+{
+    text_free(a);
+    vf_strlcpy(a->text_title, "A password without encryption", sizeof a->text_title);
+    text_add(a, "%s (port %d) offers no encryption that works:", a->host, a->port);
+    text_add(a, "");
+    text_add(a, "  %s", a->banner);
+    text_add(a, "");
+    text_add(a, "Your password for %s would cross the network as you typed it,", a->user);
+    text_add(a, "where anyone on the way can read it. N disconnects and sends nothing;");
+    text_add(a, "SFTP to the same server, if it has it, encrypts everything.");
+    a->mode = M_CONFIRM;
+    a->prompt = P_ASK;
+    a->ask = ASK_CLEARPW;
+    vf_strlcpy(a->prompt_label, "Send the password unencrypted? (Y/N) [N]: ", sizeof a->prompt_label);
+    vfp_flush_keys();
 }
 
 static void hostkey_ask(vf_app *a)
@@ -322,6 +375,7 @@ static void connect_now(vf_app *a)
     int port;
     form_store(a);
     vf_trim(a->fv[FF_HOST]); vf_trim(a->fv[FF_USER]); vf_trim(a->fv[FF_PORT]);
+    if (!proto_of(a->fv[FF_PROTO])) { form_fail(a, FF_PROTO, "SFTP or FTP (SCP comes in a later version)"); return; }
     if (!a->fv[FF_HOST][0]) { form_fail(a, FF_HOST, "Which server?"); return; }
     if (!a->fv[FF_USER][0]) { form_fail(a, FF_USER, "Which user?"); return; }
     port = atoi(a->fv[FF_PORT]);
@@ -330,7 +384,10 @@ static void connect_now(vf_app *a)
     vf_strlcpy(a->host, a->fv[FF_HOST], sizeof a->host);
     vf_strlcpy(a->user, a->fv[FF_USER], sizeof a->user);
     a->port = port;
-    st = vfr_connect(VFR_SFTP, a->host, port, &a->rem, &a->hk, err, sizeof err);
+    a->proto = proto_of(a->fv[FF_PROTO]);
+    a->rvms = 0;
+    a->clear_ok = 0;
+    st = vfr_connect(a->proto, a->host, port, &a->rem, &a->hk, err, sizeof err);
     if (!(st & 1)) { form_fail(a, FF_HOST, "Cannot connect: %s", err); a->rem = 0; return; }
     vf_strlcpy(a->banner, vfr_banner(a->rem), sizeof a->banner);
     if (a->hk.known == VFR_HK_MISMATCH) {
@@ -406,14 +463,14 @@ static int get_one(vf_app *a, const vf_entry *e, char *err, int esz)
     vfp_file *lf;
     unsigned int st;
     int got, text;
-    vf_rjoin(a->pane[PANE_REMOTE].dir, e->name, rpath, sizeof rpath);
+    vf_xfile(a->rvms, a->pane[PANE_REMOTE].dir, e->name, rpath, sizeof rpath);
     vf_local_name(e->name, a->ods5, lname, sizeof lname);
     vf_lfile(a->pane[PANE_LOCAL].dir, lname, lspec, sizeof lspec);
     text = want_text(a, e->name);
     a->xfer_text = text;
     vf_strlcpy(a->xfer_name, e->name, sizeof a->xfer_name);
     a->xfer_done = 0; a->xfer_total = e->size;
-    st = vfr_open_read(a->rem, rpath, &rf);
+    st = vfr_open_read(a->rem, rpath, text, &rf);
     if (!(st & 1)) { snprintf(err, (size_t) esz, "%s: %s", e->name, vfr_error(a->rem)); return 0; }
     st = vfp_open_write(lspec, text, e->size, &lf, result, sizeof result);
     if (!(st & 1)) {
@@ -479,7 +536,7 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
     unsigned long long est;
     vf_lfile(a->pane[PANE_LOCAL].dir, e->name, lspec, sizeof lspec);
     vf_remote_name(e->name, rname, sizeof rname);
-    vf_rjoin(a->pane[PANE_REMOTE].dir, rname, rpath, sizeof rpath);
+    vf_xfile(a->rvms, a->pane[PANE_REMOTE].dir, rname, rpath, sizeof rpath);
     old = vf_pane_find(&a->pane[PANE_REMOTE], rname);
     replacing = old && !old->is_parent && !old->is_dir;
     if (replacing) snprintf(wpath, sizeof wpath, "%s" PART, rpath);
@@ -494,7 +551,7 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
     }
     a->xfer_text = text;
     a->xfer_done = 0; a->xfer_total = est;
-    st = vfr_open_write(a->rem, wpath, &rf);
+    st = vfr_open_write(a->rem, wpath, text, &rf);
     if (!(st & 1)) {
         vfp_close(lf, 1);
         snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem));
@@ -674,7 +731,7 @@ static void run_delete(vf_app *a)
             st = vfp_delete(path);
             if (!(st & 1)) status_text(st, m, sizeof m);
         } else {
-            vf_rjoin(p->dir, e->name, path, sizeof path);
+            vf_xfile(a->rvms, p->dir, e->name, path, sizeof path);
             st = e->is_dir ? vfr_rmdir(a->rem, path) : vfr_unlink(a->rem, path);
             if (!(st & 1)) vf_strlcpy(m, vfr_error(a->rem), sizeof m);
         }
@@ -704,8 +761,8 @@ static void rename_done(vf_app *a, const char *to)
         st = vfp_rename(from, dest);
         if (!(st & 1)) status_text(st, m, sizeof m);
     } else {
-        vf_rjoin(p->dir, e->name, from, sizeof from);
-        vf_rjoin(p->dir, to, dest, sizeof dest);
+        vf_xfile(a->rvms, p->dir, e->name, from, sizeof from);
+        vf_xfile(a->rvms, p->dir, to, dest, sizeof dest);
         st = vfr_rename(a->rem, from, dest);
         if (!(st & 1)) vf_strlcpy(m, vfr_error(a->rem), sizeof m);
     }
@@ -729,7 +786,7 @@ static void mkdir_done(vf_app *a, const char *name)
         snprintf(shown, sizeof shown, "%s.DIR;1", name);
         vf_upper(shown);
     } else {
-        vf_rjoin(p->dir, name, path, sizeof path);
+        vf_xfile(a->rvms, p->dir, name, path, sizeof path);
         st = vfr_mkdir(a->rem, path);
         if (!(st & 1)) vf_strlcpy(m, vfr_error(a->rem), sizeof m);
         vf_strlcpy(shown, name, sizeof shown);
@@ -759,13 +816,13 @@ static void enter(vf_app *a)
             if (lb && rb && rb > lb) snprintf(was, sizeof was, "%.*s.DIR;1", (int) (rb - lb - 1), lb + 1);
             vf_lparent(p->dir, dir, sizeof dir);
         } else {
-            vf_strlcpy(was, vf_rbase(p->dir), sizeof was);
-            vf_rparent(p->dir, dir, sizeof dir);
+            vf_xleft(a->rvms, p->dir, was, sizeof was);
+            vf_xparent(a->rvms, p->dir, dir, sizeof dir);
         }
     } else if (e->is_dir || (e->is_link && a->act == PANE_REMOTE)) {
         char name[256];
         if (a->act == PANE_LOCAL) { vf_ldirname(e->name, name, sizeof name); vf_lsubdir(p->dir, name, dir, sizeof dir); }
-        else vf_rjoin(p->dir, e->name, dir, sizeof dir);
+        else vf_xsubdir(a->rvms, p->dir, e->name, dir, sizeof dir);
     } else return;
     {
         char old[VF_SPEC_MAX];
@@ -801,7 +858,9 @@ static void jump(vf_app *a, const char *to)
         a->ods5 = ods5;
     } else {
         char path[VF_SPEC_MAX];
-        vf_rjoin(p->dir, to, path, sizeof path);
+        /* a VMS server takes "[.SUB]", "SUB" or a full spec, from where it is (N8) */
+        if (a->rvms) vf_strlcpy(path, to, sizeof path);
+        else vf_rjoin(p->dir, to, path, sizeof path);
         st = vfr_realpath(a->rem, path, dir, sizeof dir);
         if (!(st & 1)) { vf_set_msg(a, 1, "%s: %s", to, vfr_error(a->rem)); return; }
     }
@@ -849,8 +908,8 @@ static void view(vf_app *a)
         char path[VF_SPEC_MAX];
         vfr_file *f;
         unsigned long long total = 0;
-        vf_rjoin(p->dir, e->name, path, sizeof path);
-        st = vfr_open_read(a->rem, path, &f);
+        vf_xfile(a->rvms, p->dir, e->name, path, sizeof path);
+        st = vfr_open_read(a->rem, path, 1, &f);
         if (!(st & 1)) { vf_set_msg(a, 1, "%s: %s", e->name, vfr_error(a->rem)); return; }
         vf_lines_init(&a->lines);
         while (((st = vfr_read(f, buf, sizeof buf, &got)) & 1) && got > 0 && total < 4000000ULL) {
@@ -883,7 +942,7 @@ static void info(vf_app *a)
         text_add(a, "Owner       %s", e->owner);
     } else {
         char path[VF_SPEC_MAX];
-        vf_rjoin(p->dir, e->name, path, sizeof path);
+        vf_xfile(a->rvms, p->dir, e->name, path, sizeof path);
         text_add(a, "Path        %s:%s", a->host, path);
         if (!e->has_size) text_add(a, "Size        unknown");
         else if (e->size < 100000ULL) text_add(a, "Size        %llu bytes", e->size);
@@ -958,6 +1017,17 @@ static void ask_answer(vf_app *a, int key)
         if (!yes) { disconnect(a, "host key not trusted"); form_fail(a, FF_HOST, "Not connected: the server was not trusted"); return; }
         if (!(vfr_trust(a->rem) & 1)) vf_set_msg(a, 1, "Could not add the key to %s: %s", a->hk.file, vfr_error(a->rem));
         else logf_("HOSTKEY ADDED %s:%d %s %s to %s", a->host, a->port, a->hk.type, a->hk.fingerprint, a->hk.file);
+        login(a);
+        return;
+    case ASK_CLEARPW:
+        if (!yes) {
+            wipe(a->fv[FF_PASSWORD], VF_FIELD);
+            disconnect(a, "password not sent in clear");
+            form_fail(a, FF_PASSWORD, "Not connected: the password was not sent");
+            return;
+        }
+        a->clear_ok = 1;
+        logf_("CLEAR PASSWORD agreed for %s@%s:%d", a->user, a->host, a->port);
         login(a);
         return;
     case ASK_DELETE:

@@ -23,7 +23,15 @@ build/test_ftp: tests/unit/test_ftp.c $(CORE) $(HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -o $@ tests/unit/test_ftp.c $(CORE)
 
-test: build/test_core build/test_ftp build/test_app
+# the FTP client and the dispatcher compile here too (sockets are POSIX); vf_sftp.c
+# needs libssh2 and is checked on the nodes only
+NET = src/net/vf_ftp.c src/net/vf_remote.c
+build/net.ok: $(NET) $(HDRS)
+	@mkdir -p build
+	for f in $(NET); do $(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200112L -fsyntax-only $$f || exit 1; done
+	@touch $@
+
+test: build/net.ok build/test_core build/test_ftp build/test_app
 	./build/test_core
 	./build/test_ftp
 	./build/test_app

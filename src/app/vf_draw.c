@@ -231,12 +231,11 @@ static void draw_text(vf_app *a, const char *label, const char *l1, const char *
 static void draw_form(vf_app *a)
 {
     vf_screen *s = &a->scr;
-    int i, r = 3, lw = 18, vc = 2 + lw + 1, vw = s->cols - vc - 3;
+    int i, r = 2, lw = 18, vc = 2 + lw + 1, vw = s->cols - vc - 3;
+    int ftp = !vf_strcasecmp(a->fcur == FF_PROTO ? a->fedit.buf : a->fv[FF_PROTO], "FTP");
     char stars[VF_FIELD];
     draw_title(a, "Open a connection");
     vf_box(s, 1, 0, s->rows - 3, s->cols - 1);
-    vf_put(s, 2, 2, "Protocol", 0, lw);
-    vf_put(s, 2, vc, "SFTP  (FTP and SCP come later)", 0, vw);
     for (i = 0; i < FF_COUNT && r < s->rows - 6; i++, r++) {
         const char *v = i == a->fcur ? a->fedit.buf : a->fv[i];
         int secret = i == FF_PASSWORD || i == FF_PHRASE, n = (int) strlen(v), start = 0;
@@ -264,7 +263,9 @@ static void draw_form(vf_app *a)
         vf_put(s, r, 2, a->form_err, VF_A_BOLD | VF_A_REV, cut);
         if (n > cut) vf_put(s, r + 1, 2, a->form_err + cut + (a->form_err[cut] == ' '), VF_A_BOLD | VF_A_REV, w);
     } else vf_put(s, r, 2, vf_field_hint(a->fcur), 0, s->cols - 4);
-    vf_put(s, r - 1, 2, "The server's key is checked against known_hosts in your SSH directory.", 0, s->cols - 4);
+    vf_put(s, r - 1, 2, ftp ? "FTP is not encrypted: you are asked before a password is sent (D10)."
+                            : "The server's key is checked against known_hosts in your SSH directory.",
+           0, s->cols - 4);
     menu_line(s, s->rows - 2, "FORM", "Up/Down Tab Return: field to field   Ctrl/U erase   Ctrl/A overstrike", 0);
     menu_line(s, s->rows - 1, "COMMANDS", "Do or Enter: connect   F10 cancel   Help", VF_A_REV);
 }

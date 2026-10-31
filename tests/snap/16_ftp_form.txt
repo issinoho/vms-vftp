@@ -1,0 +1,24 @@
+ VFTP  Open a connection                                      25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Protocol           FTP                                                       │
+│ Host               test.example                                              │
+│ Port               21                                                        │
+│ User               test                                                      │
+│ Password                                                                     │
+│ Key file                                                                     │
+│ Key passphrase                                                               │
+│ Remote directory                                                             │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│ FTP is not encrypted: you are asked before a password is sent (D10).         │
+│ The server's name or address.                                                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ FORM  Up/Down Tab Return: field to field   Ctrl/U erase   Ctrl/A overstrike
+ COMMANDS  Do or Enter: connect   F10 cancel   Help

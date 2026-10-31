@@ -12,28 +12,28 @@
 #include <netdb.h>
 #include <libssh2.h>
 #include <libssh2_sftp.h>
-#include "vf_remote.h"
+#include "vf_rimpl.h"
 #include "vf_platform.h"
 #include "vf_util.h"
 
-struct vf_remote {
+typedef struct {
+    vf_remote base;          /* first: a vf_remote * is one of these */
     int fd;
     LIBSSH2_SESSION *s;
     LIBSSH2_SFTP *sftp;
     char host[256];
     int port;
-    char err[300];
-    char banner[128];
-};
+} sftp_remote;
 
-struct vfr_file {
-    vf_remote *r;
+typedef struct {
+    vfr_file base;
+    sftp_remote *r;
     LIBSSH2_SFTP_HANDLE *h;
-};
+} sftp_file;
 
 static int inited;
 
-static unsigned int fail(vf_remote *r, const char *what)
+static unsigned int fail(sftp_remote *r, const char *what)
 {
     char *msg = 0;
     int len = 0, rc = libssh2_session_last_error(r->s, &msg, &len, 0);
@@ -45,14 +45,14 @@ static unsigned int fail(vf_remote *r, const char *what)
             "lock conflict", "directory not empty", "not a directory", "invalid file name",
             "link loop" };
         unsigned long code = libssh2_sftp_last_error(r->sftp);
-        snprintf(r->err, sizeof r->err, "%s%s%s", what, *what ? ": " : "",
+        snprintf(r->base.err, sizeof r->base.err, "%s%s%s", what, *what ? ": " : "",
                  code < sizeof names / sizeof names[0] ? names[code] : "SFTP error");
     } else
-        snprintf(r->err, sizeof r->err, "%s%s%s", what, *what ? ": " : "", msg && *msg ? msg : "SSH error");
+        snprintf(r->base.err, sizeof r->base.err, "%s%s%s", what, *what ? ": " : "", msg && *msg ? msg : "SSH error");
     return VFR_FAIL;
 }
 
-static int dial(const char *host, int port, char *err, int errsz)
+int vfr_dial(const char *host, int port, char *err, int errsz)
 {
     struct addrinfo hints, *res, *ai;
     char ps[16];
@@ -120,25 +120,29 @@ static int kh_keytype(int type)
     }
 }
 
-unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **out, vfr_hostkey *hk,
-                         char *err, int errsz)
+static const vfr_ops ops;
+static void sftp_disconnect(vf_remote *rr);
+
+unsigned int vfr_sftp_connect(const char *host, int port, vf_remote **out, vfr_hostkey *hk,
+                              char *err, int errsz)
 {
-    vf_remote *r;
+    sftp_remote *r;
     const char *fp, *key, *banner;
     size_t klen;
     int type;
-    (void) proto;
     *out = 0;
     memset(hk, 0, sizeof *hk);
     if (!inited) {
         if (libssh2_init(0) != 0) { snprintf(err, (size_t) errsz, "libssh2 could not start"); return VFR_FAIL; }
         inited = 1;
     }
-    r = (vf_remote *) calloc(1, sizeof *r);
+    r = (sftp_remote *) calloc(1, sizeof *r);
     if (!r) { snprintf(err, (size_t) errsz, "no memory"); return VFR_FAIL; }
+    r->base.ops = &ops;
+    r->base.secure = 1;                                 /* SSH: the password is encrypted */
     vf_strlcpy(r->host, host, sizeof r->host);
     r->port = port;
-    r->fd = dial(host, port, err, errsz);
+    r->fd = vfr_dial(host, port, err, errsz);
     if (r->fd < 0) { free(r); return VFR_FAIL; }
     r->s = libssh2_session_init();
     if (!r->s) { close(r->fd); free(r); snprintf(err, (size_t) errsz, "no memory"); return VFR_FAIL; }
@@ -146,12 +150,12 @@ unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **out,
     libssh2_session_set_timeout(r->s, 60000);
     if (libssh2_session_handshake(r->s, r->fd) != 0) {
         fail(r, "SSH handshake");
-        vf_strlcpy(err, r->err, (size_t) errsz);
-        vfr_disconnect(r);
+        vf_strlcpy(err, r->base.err, (size_t) errsz);
+        sftp_disconnect(&r->base);
         return VFR_FAIL;
     }
     banner = libssh2_session_banner_get(r->s);
-    vf_strlcpy(r->banner, banner ? banner : "", sizeof r->banner);
+    vf_strlcpy(r->base.banner, banner ? banner : "", sizeof r->base.banner);
 
     key = libssh2_session_hostkey(r->s, &klen, &type);
     fp = libssh2_hostkey_hash(r->s, LIBSSH2_HOSTKEY_HASH_SHA256);
@@ -173,12 +177,13 @@ unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **out,
         } else hk->known = VFR_HK_NOTFOUND;
         if (kh) libssh2_knownhost_free(kh);
     }
-    *out = r;
+    *out = &r->base;
     return 1;
 }
 
-unsigned int vfr_trust(vf_remote *r)
+static unsigned int sftp_trust(vf_remote *rr)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     LIBSSH2_KNOWNHOSTS *kh;
     struct libssh2_knownhost *entry = 0;
     const char *key;
@@ -205,12 +210,13 @@ unsigned int vfr_trust(vf_remote *r)
     line[outlen] = '\0';
     vfp_ssh_file("known_hosts", file, sizeof file);
     st = vfp_append_line(file, line);
-    if (!(st & 1)) { snprintf(r->err, sizeof r->err, "%s could not be written", file); return VFR_FAIL; }
+    if (!(st & 1)) { snprintf(r->base.err, sizeof r->base.err, "%s could not be written", file); return VFR_FAIL; }
     return 1;
 }
 
-unsigned int vfr_methods(vf_remote *r, const char *user, char *out, int size)
+static unsigned int sftp_methods(vf_remote *rr, const char *user, char *out, int size)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     char *m = libssh2_userauth_list(r->s, user, (unsigned int) strlen(user));
     vf_strlcpy(out, m ? m : "", (size_t) size);
     return m || libssh2_userauth_authenticated(r->s) ? 1 : fail(r, "login methods");
@@ -232,7 +238,7 @@ static void kbd_answer(const char *name, int name_len, const char *instruction, 
     }
 }
 
-static unsigned int start_sftp(vf_remote *r)
+static unsigned int start_sftp(sftp_remote *r)
 {
     libssh2_keepalive_config(r->s, 1, 30);
     r->sftp = libssh2_sftp_init(r->s);
@@ -240,8 +246,9 @@ static unsigned int start_sftp(vf_remote *r)
     return 1;
 }
 
-unsigned int vfr_login_password(vf_remote *r, const char *user, const char *password)
+static unsigned int sftp_login_password(vf_remote *rr, const char *user, const char *password)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     char *m = libssh2_userauth_list(r->s, user, (unsigned int) strlen(user));
     int rc = -1;
     if (m && strstr(m, "password"))
@@ -252,12 +259,13 @@ unsigned int vfr_login_password(vf_remote *r, const char *user, const char *pass
         rc = libssh2_userauth_keyboard_interactive(r->s, user, kbd_answer);
         kbd_password = 0;
     }
-    if (rc != 0) { fail(r, ""); if (!m) vf_strlcpy(r->err, "the server offers no password login", sizeof r->err); return VFR_AUTH; }
+    if (rc != 0) { fail(r, ""); if (!m) vf_strlcpy(r->base.err, "the server offers no password login", sizeof r->base.err); return VFR_AUTH; }
     return start_sftp(r);
 }
 
-unsigned int vfr_login_key(vf_remote *r, const char *user, const char *keyfile, const char *passphrase)
+static unsigned int sftp_login_key(vf_remote *rr, const char *user, const char *keyfile, const char *passphrase)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     if (libssh2_userauth_publickey_fromfile(r->s, user, 0, keyfile,
                                             passphrase && *passphrase ? passphrase : 0) != 0) {
         fail(r, "");
@@ -266,15 +274,16 @@ unsigned int vfr_login_key(vf_remote *r, const char *user, const char *keyfile, 
     return start_sftp(r);
 }
 
-unsigned int vfr_realpath(vf_remote *r, const char *path, char *out, int size)
+static unsigned int sftp_realpath(vf_remote *rr, const char *path, char *out, int size)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     int n = libssh2_sftp_realpath(r->sftp, path, out, (unsigned int) size - 1);
     LIBSSH2_SFTP_ATTRIBUTES at;
     if (n < 0) return fail(r, path);
     out[n] = '\0';
     if (libssh2_sftp_stat(r->sftp, out, &at) != 0) return fail(r, out);
     if ((at.flags & LIBSSH2_SFTP_ATTR_PERMISSIONS) && !LIBSSH2_SFTP_S_ISDIR(at.permissions)) {
-        snprintf(r->err, sizeof r->err, "%s is not a directory", out);
+        snprintf(r->base.err, sizeof r->base.err, "%s is not a directory", out);
         return VFR_FAIL;
     }
     return 1;
@@ -310,8 +319,9 @@ static void fill(const char *name, const LIBSSH2_SFTP_ATTRIBUTES *at, const char
     }
 }
 
-unsigned int vfr_list(vf_remote *r, const char *dir, vfr_entry_cb cb, void *ctx)
+static unsigned int sftp_list(vf_remote *rr, const char *dir, vfr_entry_cb cb, void *ctx)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     LIBSSH2_SFTP_HANDLE *h = libssh2_sftp_opendir(r->sftp, dir);
     LIBSSH2_SFTP_ATTRIBUTES at;
     char name[512], longentry[1024];
@@ -337,8 +347,9 @@ unsigned int vfr_list(vf_remote *r, const char *dir, vfr_entry_cb cb, void *ctx)
     return 1;
 }
 
-unsigned int vfr_stat(vf_remote *r, const char *path, vf_entry *e)
+static unsigned int sftp_stat(vf_remote *rr, const char *path, vf_entry *e)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     LIBSSH2_SFTP_ATTRIBUTES at;
     const char *base = strrchr(path, '/');
     if (libssh2_sftp_stat(r->sftp, path, &at) != 0) return fail(r, path);
@@ -346,23 +357,27 @@ unsigned int vfr_stat(vf_remote *r, const char *path, vf_entry *e)
     return 1;
 }
 
-unsigned int vfr_mkdir(vf_remote *r, const char *path)
+static unsigned int sftp_mkdir(vf_remote *rr, const char *path)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     return libssh2_sftp_mkdir(r->sftp, path, 0755) == 0 ? 1 : fail(r, path);
 }
 
-unsigned int vfr_rmdir(vf_remote *r, const char *path)
+static unsigned int sftp_rmdir(vf_remote *rr, const char *path)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     return libssh2_sftp_rmdir(r->sftp, path) == 0 ? 1 : fail(r, path);
 }
 
-unsigned int vfr_unlink(vf_remote *r, const char *path)
+static unsigned int sftp_unlink(vf_remote *rr, const char *path)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     return libssh2_sftp_unlink(r->sftp, path) == 0 ? 1 : fail(r, path);
 }
 
-unsigned int vfr_rename(vf_remote *r, const char *from, const char *to)
+static unsigned int sftp_rename(vf_remote *rr, const char *from, const char *to)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     /* no OVERWRITE: renaming onto an existing name fails rather than replacing it */
     return libssh2_sftp_rename_ex(r->sftp, from, (unsigned int) strlen(from), to, (unsigned int) strlen(to),
                                   LIBSSH2_SFTP_RENAME_ATOMIC | LIBSSH2_SFTP_RENAME_NATIVE) == 0 ? 1 : fail(r, from);
@@ -370,8 +385,9 @@ unsigned int vfr_rename(vf_remote *r, const char *from, const char *to)
 
 /* OpenSSH's posix-rename replaces in one step. A server without it (SFTP v3 rename
    never replaces): delete the old file, then rename. */
-unsigned int vfr_replace(vf_remote *r, const char *from, const char *to)
+static unsigned int sftp_replace(vf_remote *rr, const char *from, const char *to)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     unsigned int fl = (unsigned int) strlen(from), tl = (unsigned int) strlen(to);
     if (libssh2_sftp_posix_rename_ex(r->sftp, from, fl, to, tl) == 0) return 1;
     if (libssh2_sftp_unlink_ex(r->sftp, to, tl) != 0) return fail(r, to);
@@ -379,43 +395,49 @@ unsigned int vfr_replace(vf_remote *r, const char *from, const char *to)
            ? 1 : fail(r, from);
 }
 
-unsigned int vfr_open_read(vf_remote *r, const char *path, vfr_file **out)
+static unsigned int sftp_open_read(vf_remote *rr, const char *path, int text, vfr_file **out)
 {
-    vfr_file *f;
+    sftp_remote *r = (sftp_remote *) rr;
+    sftp_file *f;
     LIBSSH2_SFTP_HANDLE *h = libssh2_sftp_open(r->sftp, path, LIBSSH2_FXF_READ, 0);
+    (void) text;                                        /* SFTP moves bytes (N4) */
     if (!h) return fail(r, path);
-    f = (vfr_file *) calloc(1, sizeof *f);
-    if (!f) { libssh2_sftp_close(h); snprintf(r->err, sizeof r->err, "no memory"); return VFR_FAIL; }
-    f->r = r; f->h = h;
-    *out = f;
+    f = (sftp_file *) calloc(1, sizeof *f);
+    if (!f) { libssh2_sftp_close(h); snprintf(r->base.err, sizeof r->base.err, "no memory"); return VFR_FAIL; }
+    f->base.r = rr; f->r = r; f->h = h;
+    *out = &f->base;
     return 1;
 }
 
-unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got)
+static unsigned int sftp_read(vfr_file *ff, char *buf, int size, int *got)
 {
+    sftp_file *f = (sftp_file *) ff;
     ssize_t n = libssh2_sftp_read(f->h, buf, (size_t) size);
     if (n < 0) { *got = 0; return fail(f->r, "read"); }
     *got = (int) n;
     return 1;
 }
 
-unsigned int vfr_open_write(vf_remote *r, const char *path, vfr_file **out)
+static unsigned int sftp_open_write(vf_remote *rr, const char *path, int text, vfr_file **out)
 {
-    vfr_file *f;
+    sftp_remote *r = (sftp_remote *) rr;
+    sftp_file *f;
     LIBSSH2_SFTP_HANDLE *h = libssh2_sftp_open(r->sftp, path,
                                                LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC,
                                                LIBSSH2_SFTP_S_IRUSR | LIBSSH2_SFTP_S_IWUSR |
                                                LIBSSH2_SFTP_S_IRGRP | LIBSSH2_SFTP_S_IROTH);
+    (void) text;
     if (!h) return fail(r, path);
-    f = (vfr_file *) calloc(1, sizeof *f);
-    if (!f) { libssh2_sftp_close(h); snprintf(r->err, sizeof r->err, "no memory"); return VFR_FAIL; }
-    f->r = r; f->h = h;
-    *out = f;
+    f = (sftp_file *) calloc(1, sizeof *f);
+    if (!f) { libssh2_sftp_close(h); snprintf(r->base.err, sizeof r->base.err, "no memory"); return VFR_FAIL; }
+    f->base.r = rr; f->r = r; f->h = h;
+    *out = &f->base;
     return 1;
 }
 
-unsigned int vfr_write(vfr_file *f, const char *buf, int len)
+static unsigned int sftp_write(vfr_file *ff, const char *buf, int len)
 {
+    sftp_file *f = (sftp_file *) ff;
     while (len > 0) {
         ssize_t n = libssh2_sftp_write(f->h, buf, (size_t) len);
         if (n < 0) return fail(f->r, "write");
@@ -424,22 +446,25 @@ unsigned int vfr_write(vfr_file *f, const char *buf, int len)
     return 1;
 }
 
-unsigned int vfr_close(vfr_file *f)
+static unsigned int sftp_close(vfr_file *ff)
 {
+    sftp_file *f = (sftp_file *) ff;
     int rc = libssh2_sftp_close(f->h);
-    vf_remote *r = f->r;
+    sftp_remote *r = f->r;
     free(f);
     return rc == 0 ? 1 : fail(r, "close");
 }
 
-void vfr_keepalive(vf_remote *r)
+static void sftp_keepalive(vf_remote *rr)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     int next = 0;
     if (r && r->s) libssh2_keepalive_send(r->s, &next);
 }
 
-void vfr_disconnect(vf_remote *r)
+static void sftp_disconnect(vf_remote *rr)
 {
+    sftp_remote *r = (sftp_remote *) rr;
     if (!r) return;
     if (r->sftp) libssh2_sftp_shutdown(r->sftp);
     if (r->s) {
@@ -450,5 +475,9 @@ void vfr_disconnect(vf_remote *r)
     free(r);
 }
 
-const char *vfr_error(vf_remote *r) { return r ? r->err : ""; }
-const char *vfr_banner(vf_remote *r) { return r ? r->banner : ""; }
+static const vfr_ops ops = {
+    sftp_trust, sftp_methods, sftp_login_password, sftp_login_key, sftp_realpath,
+    sftp_list, sftp_stat, sftp_mkdir, sftp_rmdir, sftp_unlink, sftp_rename, sftp_replace,
+    sftp_open_read, sftp_read, sftp_open_write, sftp_write, sftp_close,
+    sftp_keepalive, sftp_disconnect
+};

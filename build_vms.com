@@ -43,12 +43,16 @@ $   goto app_loop
 $ app_done:
 $ cc'cflags'/object=[.build]vf_sftp.obj [.src.net]vf_sftp.c
 $ if $severity .ne. 1 then goto failed
+$ cc'cflags'/object=[.build]vf_ftp.obj [.src.net]vf_ftp.c
+$ if $severity .ne. 1 then goto failed
+$ cc'cflags'/object=[.build]vf_remote.obj [.src.net]vf_remote.c
+$ if $severity .ne. 1 then goto failed
 $ cc'cflags'/object=[.build]vf_plat_vms.obj [.src.plat.vms]vf_plat_vms.c
 $ if $severity .ne. 1 then goto failed
 $ cc'cflags'/object=[.build]vf_main.obj [.src.plat.vms]vf_main.c
 $ if $severity .ne. 1 then goto failed
 $ set default [.build]
-$ link/executable=vftp.exe vf_main.obj,vf_plat_vms.obj,vf_sftp.obj,'core','app','ssh2opt'/options
+$ link/executable=vftp.exe vf_main.obj,vf_plat_vms.obj,vf_remote.obj,vf_sftp.obj,vf_ftp.obj,'core','app','ssh2opt'/options
 $ s = $severity
 $ set default [-]
 $! an undefined symbol is only a warning on VMS (VTREE CLAUDE.md)

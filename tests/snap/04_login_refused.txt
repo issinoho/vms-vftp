@@ -1,6 +1,6 @@
  VFTP  Open a connection                                      25-OCT-2026 10:12
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Protocol           SFTP  (FTP and SCP come later)                            │
+│ Protocol           SFTP                                                      │
 │ Host               test.example                                              │
 │ Port               22                                                        │
 │ User               test                                                      │
