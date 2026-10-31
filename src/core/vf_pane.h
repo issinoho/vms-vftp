@@ -27,6 +27,8 @@ enum { VF_SORT_NAME, VF_SORT_TYPE, VF_SORT_SIZE, VF_SORT_DATE, VF_SORTS };
 
 typedef struct {
     int local;               /* 1: this machine (VMS specs), 0: the remote side */
+    int vms;                 /* VMS files: versions, blocks, protection (local, or a VMS
+                                FTP server, N8); set to local by vf_pane_init */
     char dir[VF_SPEC_MAX];   /* "DKA0:[IAIN]" or "/home/iain"; "" = nothing read */
     vf_entry *e; int n, cap;
     int *vis; int nvis;      /* shown, in order: indexes into e */

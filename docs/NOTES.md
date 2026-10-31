@@ -181,3 +181,28 @@ iain@localhost (password not sent in clear)", nothing sent), then Y and "LOGIN
 iain@localhost:21 by password". It shows no GET, PUT, DELETE, RENAME or MKDIR, so
 transfers and changes over FTP are still to be tried (D11's live test).
 (`TYPE/TAIL` of the Stream_LF log fails with RMS-F-ORG; plain TYPE reads it.)
+
+## N10. VFTP over FTP to each node's own server (2026-10-31, tools/live_ftp.sh)
+
+Logged in as the test account VFTPTEST (D11) to localhost:21 on x86 and on IA64
+(TCP/IP Services FTP 6.0 on both), the password from tools/live_ftp_pass.
+- **The account:** TCP/IP Services counts an FTP login as remote interactive: with
+  /NOREMOTE the server's log says "%TCPIP-E-FTP_LOGFAL, remote interactive login
+  failure" and VFTP shows "530 Login incorrect". AUTHORIZE's ADD also copies
+  DEFAULT's DisUser flag: /FLAGS=NODISUSER is needed. Both set by the user.
+- D10: N disconnects and sends nothing ("password not sent in clear"); Y logs in.
+  The password is in no output (PTYDRIVE logs step labels only; the field shows
+  stars; the filled key script is deleted from the node).
+- Get of R.BIN (TYPE I) byte for byte by MD5, R.TXT (TYPE A) as records; Get and Put
+  of a 10 MB BIG.BIN cancelled by Ctrl/C (no partial local file; the server's
+  BIG.BIN;1 unchanged by MD5, no new version left). U.TXT put twice: u.txt;1 and
+  ;2 (a new version, no replace question, as on SFTP). MKD, CWD into SUBDIR and
+  back up (VMS specs: USER$ROOT:[VFTPTEST.SUBDIR]), RNFR/RNTO, DELE with the
+  version: all as the log says. Localhost moves 10 MB in about 1 s, so the cancel
+  step waits 0.3 s.
+- Seen on the screens and fixed: the remote pane showed sizes as blocks x 512 and
+  versions lowest first, and the attributes Unix permissions; a VMS server's pane
+  now shows blocks, the highest version first, and the protection (vf_pane.vms).
+  The title and status line said SFTP on an FTP connection.
+- On x86 the workdir and [VFTPTEST] are on different disks: RENAME cannot move a
+  file between them (the test's setup now copies).

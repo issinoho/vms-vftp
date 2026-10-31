@@ -252,6 +252,7 @@ static void disconnect(vf_app *a, const char *why)
         logf_("DISCONNECT %s@%s (%s)", a->user, a->host, why);
     }
     a->rem = 0;
+    a->rvms = a->pane[PANE_REMOTE].vms = 0;
     a->pane[PANE_REMOTE].dir[0] = '\0';
     vf_pane_clear(&a->pane[PANE_REMOTE]);
     vf_pane_rebuild(&a->pane[PANE_REMOTE]);
@@ -313,6 +314,7 @@ static void login(vf_app *a)
         return;
     }
     a->rvms = vfr_vms_paths(a->rem);
+    a->pane[PANE_REMOTE].vms = a->rvms;          /* versions highest first, blocks, protection */
     logf_("LOGIN %s@%s:%d by %s", a->user, a->host, a->port, how);
     st = vfr_realpath(a->rem, a->fv[FF_DIR][0] ? a->fv[FF_DIR] : ".", dir, sizeof dir);
     if (!(st & 1)) {
@@ -944,6 +946,15 @@ static void info(vf_app *a)
         char path[VF_SPEC_MAX];
         vf_xfile(a->rvms, p->dir, e->name, path, sizeof path);
         text_add(a, "Path        %s:%s", a->host, path);
+        if (a->rvms) {
+            /* a VMS server's listing (N8): blocks, protection, owner */
+            text_add(a, "Size        %u blocks", e->blocks);
+            text_add(a, "Type        %s", e->is_dir ? "directory" : "file");
+            text_add(a, "Protection  %s", e->prot);
+            text_add(a, "Owner       %s", e->owner);
+            text_add(a, "Get as      %s", e->is_dir ? "-" : want_text(a, e->name) ? "text (variable-length records)"
+                                                               : "binary, fixed 512-byte records");
+        } else {
         if (!e->has_size) text_add(a, "Size        unknown");
         else if (e->size < 100000ULL) text_add(a, "Size        %llu bytes", e->size);
         else text_add(a, "Size        %llu bytes (%s)", e->size, vf_fmt_bytes(e->size, when, sizeof when));
@@ -953,6 +964,7 @@ static void info(vf_app *a)
         text_add(a, "Get as      %s", e->is_dir ? "-" : want_text(a, e->name) ? "text (variable-length records)"
                                                     : e->size % 512 == 0 ? "binary, fixed 512-byte records"
                                                                          : "binary, undefined records");
+        }
     }
     if (e->has_time) text_add(a, "Modified    %s", vf_fmt_when(&e->mtime, when, sizeof when));
     a->back_mode = M_MAIN;
@@ -970,7 +982,7 @@ static void help_build(vf_app *a)
     text_add(a, "  Left, -                      up one directory");
     text_add(a, "  J                            jump to a directory (a VMS spec or a path)");
     text_add(a, "CONNECTION");
-    text_add(a, "  O                            open a connection (SFTP); GOLD O closes it");
+    text_add(a, "  O                            open (SFTP or FTP); GOLD O closes it");
     text_add(a, "FILES");
     text_add(a, "  G  Get                       download the tagged (or current) remote files");
     text_add(a, "  P  Put                       upload the tagged (or current) local files");

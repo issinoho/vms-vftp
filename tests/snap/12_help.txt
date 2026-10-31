@@ -7,7 +7,7 @@
 │   Left, -                      up one directory                              │
 │   J                            jump to a directory (a VMS spec or a path)    │
 │ CONNECTION                                                                   │
-│   O                            open a connection (SFTP); GOLD O closes it    │
+│   O                            open (SFTP or FTP); GOLD O closes it          │
 │ FILES                                                                        │
 │   G  Get                       download the tagged (or current) remote files │
 │   P  Put                       upload the tagged (or current) local files    │

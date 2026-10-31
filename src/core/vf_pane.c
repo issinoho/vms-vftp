@@ -9,6 +9,7 @@ void vf_pane_init(vf_pane *p, int local)
 {
     memset(p, 0, sizeof *p);
     p->local = local;
+    p->vms = local;
     p->status = 1;
     vf_strlcpy(p->filter, "*", sizeof p->filter);
 }
@@ -45,7 +46,7 @@ static const char *type_of(const char *name)
 
 static int name_cmp(const vf_pane *p, const char *a, const char *b)
 {
-    return p->local ? vf_strcasecmp(a, b) : strcmp(a, b);
+    return p->vms ? vf_strcasecmp(a, b) : strcmp(a, b);
 }
 
 static int cmp_entry(const void *x, const void *y)
@@ -58,13 +59,13 @@ static int cmp_entry(const void *x, const void *y)
     switch (p->sort) {
     case VF_SORT_TYPE: r = vf_strcasecmp(type_of(a->name), type_of(b->name)); break;
     case VF_SORT_SIZE:
-        if (p->local) r = a->blocks < b->blocks ? 1 : a->blocks > b->blocks ? -1 : 0;
+        if (p->vms) r = a->blocks < b->blocks ? 1 : a->blocks > b->blocks ? -1 : 0;
         else r = a->size < b->size ? 1 : a->size > b->size ? -1 : 0;
         break;
     case VF_SORT_DATE: r = -vf_when_cmp(&a->mtime, &b->mtime); break;
     default: break;
     }
-    if (!r && p->local) {
+    if (!r && p->vms) {
         /* versions of one file: the highest first, as DIRECTORY shows them */
         char na[256], nb[256];
         const char *sa = strrchr(a->name, ';'), *sb = strrchr(b->name, ';');
@@ -82,7 +83,7 @@ static void base_name(const vf_pane *p, const char *name, char *out, size_t size
 {
     char *semi;
     vf_strlcpy(out, name, size);
-    if (p->local && (semi = strrchr(out, ';')) != 0) *semi = '\0';
+    if (p->vms && (semi = strrchr(out, ';')) != 0) *semi = '\0';
 }
 
 static int shown(const vf_pane *p, const vf_entry *e)
@@ -230,18 +231,17 @@ void vf_pane_row(const vf_pane *p, const vf_entry *e, int width, int year, char 
         buf[width < (int) size ? width : (int) size - 1] = '\0';
         return;
     }
-    if (e->is_dir) vf_strlcpy(sz, p->local ? "" : "<DIR>", sizeof sz);
+    if (e->is_dir) vf_strlcpy(sz, "<DIR>", sizeof sz);
     else if (!e->has_size) vf_strlcpy(sz, "?", sizeof sz);
-    else if (p->local) snprintf(sz, sizeof sz, "%u", e->blocks);
+    else if (p->vms) snprintf(sz, sizeof sz, "%u", e->blocks);       /* VMS sizes are blocks */
     else vf_fmt_bytes(e->size, sz, sizeof sz);
-    if (p->local && e->is_dir) vf_strlcpy(sz, "<DIR>", sizeof sz);
     fmt_date(e, wide, year, date, sizeof date);
     extra[0] = '\0';
     if (wide) {
         /* protection or permissions, then the owner, as long as names keep 18 columns */
         char perms[16], t[64];
         int base = width - 1 - 6 - 1 - 17;
-        if (p->local) snprintf(t, sizeof t, " %-16.16s", e->prot);
+        if (p->vms) snprintf(t, sizeof t, " %-16.16s", e->prot);
         else snprintf(t, sizeof t, " %s", e->perms ? vf_fmt_perms(e->perms, e->is_dir, e->is_link, perms, sizeof perms)
                                                    : "          ");
         if (base - (int) strlen(t) >= 18) {
@@ -253,7 +253,7 @@ void vf_pane_row(const vf_pane *p, const vf_entry *e, int width, int year, char 
     nw = width - 1 - 6 - 1 - (int) strlen(wide ? "25-OCT-2026 10:01" : "25-OCT") - (int) strlen(extra);
     if (nw < 8) nw = 8;
     vf_strlcpy(name, e->name, sizeof name);
-    if (!p->local && e->is_dir) {                  /* "data/"; a VMS server's SUB.DIR;1 as it is */
+    if (!p->vms && e->is_dir) {                    /* "data/"; a VMS server's SUB.DIR;1 as it is */
         const char *dot = strrchr(name, '.');
         if (!dot || vf_strncasecmp(dot, ".DIR;", 5)) vf_strlcat(name, "/", sizeof name);
     }

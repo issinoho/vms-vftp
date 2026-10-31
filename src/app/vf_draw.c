@@ -104,7 +104,7 @@ static void draw_pane(vf_app *a, int which, int r1, int r2, int c1, int c2)
     char buf[600];
     if (which == PANE_REMOTE && !a->rem) {
         vf_put(s, r1 + 1, c1 + 1, "Not connected.", 0, width - 1);
-        vf_put(s, r1 + 3, c1 + 1, "O opens a connection (SFTP).", 0, width - 1);
+        vf_put(s, r1 + 3, c1 + 1, "O opens a connection (SFTP or FTP).", 0, width - 1);
         return;
     }
     if (!p->nvis || (p->nvis == 1 && p->e[p->vis[0]].is_parent)) {
@@ -170,7 +170,8 @@ static void draw_strip(vf_app *a, int row, int c1, int c2)
         }
         if (strcmp(p->filter, "*") && p->filter[0])
             snprintf(left + strlen(left), sizeof left - strlen(left), "  showing %s", p->filter);
-        if (a->rem) snprintf(right, sizeof right, "Mode %s   SFTP %s@%s", vf_xmode_name(a->xmode), a->user, a->host);
+        if (a->rem) snprintf(right, sizeof right, "Mode %s   %s %s@%s", vf_xmode_name(a->xmode),
+                             a->proto == VFR_FTP ? "FTP" : "SFTP", a->user, a->host);
         else snprintf(right, sizeof right, "Mode %s   not connected", vf_xmode_name(a->xmode));
         vf_put(s, row, c1, left, 0, w - (int) strlen(right) - 2);
         vf_put(s, row, c2 - (int) strlen(right) + 1, right, VF_A_BOLD, w);
@@ -194,7 +195,8 @@ static void draw_main(vf_app *a)
     draw_pane(a, PANE_LOCAL, top + 1, sep - 1, 1, mid - 1);
     draw_pane(a, PANE_REMOTE, top + 1, sep - 1, mid + 1, s->cols - 2);
     draw_strip(a, sep + 1, 2, s->cols - 3);
-    if (a->rem) snprintf(title, sizeof title, "sftp %s@%s:%s", a->user, a->host, a->pane[PANE_REMOTE].dir);
+    if (a->rem) snprintf(title, sizeof title, "%s %s@%s:%s", a->proto == VFR_FTP ? "ftp" : "sftp",
+                         a->user, a->host, a->pane[PANE_REMOTE].dir);
     else snprintf(title, sizeof title, "%s on %s", a->sess.user, a->sess.node);
     draw_title(a, title);
     if (a->gold)

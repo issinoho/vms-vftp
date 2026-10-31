@@ -197,6 +197,19 @@ static void test_pane(void)
     vf_pane_goto(&p, "SUB.DIR;1"); vf_pane_row(&p, vf_pane_cur(&p), 36, 2026, b, sizeof b);
     CHECK(!strncmp(b, "SUB.DIR;1 ", 10));
     vf_pane_free(&p);
+    /* a VMS FTP server's files (N8): sizes in blocks, the highest version first */
+    vf_pane_init(&p, 0);
+    p.vms = 1;
+    add(&p, "u.txt;1", 0, 1, 20);
+    add(&p, "u.txt;2", 0, 3, 20);
+    add(&p, "SUB.DIR;1", 1, 1, 20);
+    vf_pane_rebuild(&p);
+    CHECKS(p.e[p.vis[0]].name, "SUB.DIR;1");
+    CHECKS(p.e[p.vis[1]].name, "u.txt;2");
+    CHECKS(p.e[p.vis[2]].name, "u.txt;1");
+    vf_pane_goto(&p, "u.txt;2"); vf_pane_row(&p, vf_pane_cur(&p), 36, 2026, b, sizeof b);
+    CHECKS(b, "u.txt;2                     3 20-OCT");
+    vf_pane_free(&p);
     CHECKS(vf_fmt_bytes(99999, b, sizeof b), "99999");
     CHECKS(vf_fmt_bytes(123456, b, sizeof b), "121K");
     CHECKS(vf_fmt_bytes(3500000, b, sizeof b), "3.3M");

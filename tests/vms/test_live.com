@@ -89,8 +89,11 @@ $ write sys$output "==== [.LIVE.SSH]"
 $ directory/size/date 'ssh'
 $ write sys$output "==== downloads from the server (compared on that side)"
 $ directory/size=all/full 'live'r.bin;*,'live'r.txt;*,'live'big.bin;*
+$ if f$search(live + "r.bin") .eqs. "" then write sys$output "LIVE-MD5 r.bin missing"
+$ if f$search(live + "r.bin") .eqs. "" then goto away_txt
 $ checksum/algorithm=md5 'live'r.bin
 $ write sys$output "LIVE-MD5 r.bin ''checksum$checksum'"
+$ away_txt:
 $ type 'live'r.txt
 $ write sys$output "==== known_hosts: the server added?"
 $ search/statistics 'ssh'known_hosts. "''p3'"

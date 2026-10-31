@@ -105,6 +105,12 @@ LIST parsing for Unix, VMS and Windows servers, MLSD where offered, REST for
 resume, SITE for permissions. Tested against the IA64 node's TCP/IP Services FTP
 server and a Linux server. FTPS (AUTH TLS through SSL3) if it is cheap by then.
 
+Status 2026-10-31: the FTP core (vf_ftpcore: replies, PASV/EPSV/PWD, LIST from VMS,
+Unix and Windows) and client (vf_ftp.c) are done; the app has a Protocol field and
+asks before a password goes without TLS (D10). Live on both nodes against their own
+FTP servers as VFTPTEST (N10). Still to do: a Linux FTP server, REST (the VMS
+servers have none, N8), SITE CHMOD, and FTPS (both nodes' AUTH TLS is refused).
+
 ## Phase 3: SCP and the rest
 
 SCP through libssh2 (transfers) with listing and management by remote shell
