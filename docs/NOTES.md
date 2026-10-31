@@ -171,3 +171,13 @@ resume, no MLSD; sizes and dates come from LIST only.** SYST needs a login, then
   open ...` / `550 file not found`. STOU without a data connection waits for one
   (the first probe run hung there). Each FTP login leaves a
   TCPIP$FTP_SERVER.LOG in the account's login directory (the server's own).
+
+## N9. VFTP's FTP client by hand on x86 (2026-10-31, the user)
+
+The user ran VFTP on x86 against its own FTP server (TCP/IP Services 6.0, now
+enabled): Protocol FTP, localhost, the user's password. Reported working. VFTP's log
+(SYS$LOGIN:VFTP.LOG) shows the D10 question both ways: N first ("DISCONNECT
+iain@localhost (password not sent in clear)", nothing sent), then Y and "LOGIN
+iain@localhost:21 by password". It shows no GET, PUT, DELETE, RENAME or MKDIR, so
+transfers and changes over FTP are still to be tried (D11's live test).
+(`TYPE/TAIL` of the Stream_LF log fails with RMS-F-ORG; plain TYPE reads it.)
