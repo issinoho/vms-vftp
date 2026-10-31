@@ -88,6 +88,16 @@ never replaces a local file: it makes a new version. Core and app tested on Linu
 against the stub (a fake remote file system), natively on both nodes, and end to
 end under PTYDRIVE against each node's own sshd and the other node.
 
+Status 2026-10-31: done. Tested on Linux (stub) and natively on both nodes, and
+live under PTYDRIVE against each node's own sshd (N5, N6), the other node in both
+directions and OpenSSH on Linux (N7). A replacing Put on a server without versions
+now writes a temporary file and renames it over the old one (N7).
+Carried forward: password login has been tried against the stub only (the tests
+type no password; to be checked by hand with the user); F5 as Copy, Backspace as
+up one directory, and `L` with the sites file (D9) are not built yet.
+
+Exit: signed off by the user, 2026-10-31.
+
 ## Phase 2: FTP
 
 Our own client (D4): control connection, USER/PASS, PASV and EPSV, TYPE A/I,
