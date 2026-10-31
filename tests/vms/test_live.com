@@ -4,7 +4,12 @@ $! typed; nothing outside [.LIVE] is changed. Print with tools/vtscreen.py.
 $! SYS$LOGIN is [.LIVE] while VFTP runs, so its SSH directory is [.LIVE.SSH]: the
 $! test key (tools/live.sh puts it in [.TESTS.VMS]) and a copy of known_hosts, which
 $! VFTP adds this node's key to. The server side is [.LIVE.REMOTE].
+$! P2 UNIX or VMS: the server is elsewhere, OpenSSH on Linux (tools/live_unix.sh) or
+$! the other node (live.sh --server, tests/vms/live_server.com), and that side is
+$! checked there: no [.LIVE.REMOTE] here, a U.TXT to put; P3 is the server's name
+$! in known_hosts.
 $ set noon
+$ away = p2 .nes. ""
 $ here = f$environment("DEFAULT")
 $ keys = p1
 $ if keys .eqs. "" then keys = "[.tests.vms]live_keys.txt"
@@ -24,11 +29,18 @@ $ rename [.tests.vms]live_key. 'ssh'id_ed25519.
 $ set security/protection=(s:rwd,o:rwd,g,w) 'ssh'id_ed25519.
 $ real = f$trnlnm("SYS$LOGIN") - "]" + ".SSH]KNOWN_HOSTS."
 $ if f$search(real) .nes. "" then copy/protection=(s:rwd,o:rwd,g,w) 'real' 'ssh'known_hosts.
+$ if away then goto away_setup
 $ create/directory 'remote'
 $ create 'remote'r.txt
 A variable-length text file on the server.
 Its second line.
 $ copy [.live]f.bin 'remote'r.bin
+$ goto setup_done
+$ away_setup:
+$ create [.live]u.txt
+Written on VMS, put to another server.
+Its second line.
+$ setup_done:
 $! BIG.BIN: F.BIN (fixed 512, 5 blocks) doubled 12 times, 10 MB, on both sides, to
 $! see progress and cancel (and that a cancelled Put leaves the server's BIG.BIN;1)
 $! (COPY A,A A would read the new, empty A as its second input: use two names)
@@ -41,7 +53,7 @@ $ rename [.live]big2.bin [.live]big1.bin
 $ n = n + 1
 $ if n .lt. 12 then goto double
 $ rename [.live]big1.bin [.live]big.bin
-$ copy [.live]big.bin 'remote'big.bin
+$ if .not. away then copy [.live]big.bin 'remote'big.bin
 $ checksum/algorithm=md5 [.live]big.bin
 $ big_md5 = checksum$checksum
 $ define/job sys$login 'live'
@@ -58,6 +70,7 @@ $ delete/nolog 'ssh'id_ed25519.;*
 $ tree = live - "]" + "...]"
 $ if f$search(tree + "id_ed25519*.*") .nes. "" then write sys$output "LIVE: a copy of the test key!"
 $ if f$search(tree + "id_ed25519*.*") .nes. "" then delete/log 'tree'id_ed25519*.*;*
+$ if away then goto away_check
 $ write sys$output "==== [.LIVE.SSH] and [.LIVE.REMOTE]"
 $ directory/size/date 'ssh','remote'
 $ write sys$output "==== downloads against their sources"
@@ -70,6 +83,18 @@ $ if checksum$checksum .eqs. big_md5 then write sys$output "LIVE: server BIG.BIN
 $ if checksum$checksum .nes. big_md5 then write sys$output "LIVE: server BIG.BIN;1 CHANGED"
 $ write sys$output "==== known_hosts: this node added?"
 $ search/statistics 'ssh'known_hosts. "localhost"
+$ goto log
+$ away_check:
+$ write sys$output "==== [.LIVE.SSH]"
+$ directory/size/date 'ssh'
+$ write sys$output "==== downloads from the server (compared on that side)"
+$ directory/size=all/full 'live'r.bin;*,'live'r.txt;*,'live'big.bin;*
+$ checksum/algorithm=md5 'live'r.bin
+$ write sys$output "LIVE-MD5 r.bin ''checksum$checksum'"
+$ type 'live'r.txt
+$ write sys$output "==== known_hosts: the server added?"
+$ search/statistics 'ssh'known_hosts. "''p3'"
+$ log:
 $ write sys$output "==== VFTP log"
 $ if f$search(live + "vftp.log") .nes. "" then type 'live'vftp.log
 $ write sys$output "==== [.LIVE]"

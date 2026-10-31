@@ -1,5 +1,6 @@
-# PTYDRIVE script for test_live.com (tools/live.sh fills in @PORT@, this node's
-# own sshd, and @RDIR@, the server-side scratch directory [.LIVE.REMOTE]).
+# PTYDRIVE script for test_live.com (tools/live.sh fills in @HOST@ and @PORT@, this
+# node's own sshd or with --server the other node's, and @RDIR@, the server-side
+# scratch directory [.LIVE.REMOTE]).
 # "<secs> <label> | <keys>". No password is ever typed: the logins are the test
 # key (to this node) and the account's key to GitHub, which has no SFTP.
 # Ctrl/C (\x03) cancels a transfer; it does nothing on the main screen, F10 exits.
@@ -21,7 +22,7 @@
 3 delete dir | d
 4 yes delete | y
 3 open | o
-2 host | \x05\x15localhost
+2 host | \x05\x15@HOST@
 2 to port | \e[B
 2 port | \x05\x15@PORT@
 2 to dir | \e[B\e[B\e[B\e[B\e[B
