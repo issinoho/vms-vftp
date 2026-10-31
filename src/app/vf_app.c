@@ -11,6 +11,7 @@
 #include "vf_path.h"
 
 #define CHUNK 32768
+#define PART ".vftp-part"            /* a replacing Put's temporary name: name.vftp-part */
 
 /* ---------- messages and text screens ---------- */
 
@@ -461,10 +462,15 @@ static int get_one(vf_app *a, const vf_entry *e, char *err, int esz)
     return 1;
 }
 
-/* Upload one local entry into the remote directory. 1 on success. */
+/* Upload one local entry into the remote directory. 1 on success. A file that
+   replaces one (a server without versions; the user said Y) is written under a
+   temporary name and renamed over the old one at the end, so a cancel or a failure
+   leaves the old file as it was. */
 static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
 {
-    char lspec[VF_SPEC_MAX], rname[300], rpath[VF_SPEC_MAX];
+    char lspec[VF_SPEC_MAX], rname[300], rpath[VF_SPEC_MAX], wpath[VF_SPEC_MAX];
+    const vf_entry *old;
+    int replacing;
     static char buf[CHUNK + 1], out[CHUNK + 2];
     vfr_file *rf;
     vfp_file *lf;
@@ -474,6 +480,10 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
     vf_lfile(a->pane[PANE_LOCAL].dir, e->name, lspec, sizeof lspec);
     vf_remote_name(e->name, rname, sizeof rname);
     vf_rjoin(a->pane[PANE_REMOTE].dir, rname, rpath, sizeof rpath);
+    old = vf_pane_find(&a->pane[PANE_REMOTE], rname);
+    replacing = old && !old->is_parent && !old->is_dir;
+    if (replacing) snprintf(wpath, sizeof wpath, "%s" PART, rpath);
+    else vf_strlcpy(wpath, rpath, sizeof wpath);
     vf_strlcpy(a->xfer_name, e->name, sizeof a->xfer_name);
     st = vfp_open_read(lspec, &text, &est, &lf);
     if (!(st & 1)) {
@@ -484,10 +494,10 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
     }
     a->xfer_text = text;
     a->xfer_done = 0; a->xfer_total = est;
-    st = vfr_open_write(a->rem, rpath, &rf);
+    st = vfr_open_write(a->rem, wpath, &rf);
     if (!(st & 1)) {
         vfp_close(lf, 1);
-        snprintf(err, (size_t) esz, "%s: %s", rpath, vfr_error(a->rem));
+        snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem));
         return 0;
     }
     progress(a, 1);
@@ -519,15 +529,21 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
         if (a->cancel) { snprintf(err, (size_t) esz, "cancelled"); st = 0; break; }
     }
     if ((st & 1) && olen) st = vfr_write(rf, out, olen);
-    if (!(st & 1) && !err[0]) snprintf(err, (size_t) esz, "%s: %s", rpath, vfr_error(a->rem));
+    if (!(st & 1) && !err[0]) snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem));
     vfp_close(lf, 1);
     {
         unsigned int cs = vfr_close(rf);
-        if ((st & 1) && !(cs & 1)) { st = cs; snprintf(err, (size_t) esz, "%s: %s", rpath, vfr_error(a->rem)); }
+        if ((st & 1) && !(cs & 1)) { st = cs; snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem)); }
     }
     if (!(st & 1)) {
+        logf_("PUT %s -> %s FAILED: %s", lspec, wpath, err);
+        /* no half file left: the temporary one always, a new one when cancelled */
+        if (replacing || strcmp(err, "cancelled") == 0) vfr_unlink(a->rem, wpath);
+        return 0;
+    }
+    if (replacing && !(vfr_replace(a->rem, wpath, rpath) & 1)) {
+        snprintf(err, (size_t) esz, "%s: %s (the new copy is %s" PART ")", rpath, vfr_error(a->rem), rname);
         logf_("PUT %s -> %s FAILED: %s", lspec, rpath, err);
-        if (strcmp(err, "cancelled") == 0) vfr_unlink(a->rem, rpath);   /* no half file left */
         return 0;
     }
     logf_("PUT %s -> %s %s %llu bytes", lspec, rpath, text ? "ASCII" : "BINARY", a->xfer_done);

@@ -197,6 +197,28 @@ static void test_cancel(void)
     stub_cancel_after(2);
     key(a, 'P');
     CHECK(!stub_remote("/home/test/kit.bck", 0));
+    /* a cancelled Put that was to replace a file (a server without versions) keeps
+       the old file: the new one goes to a temporary name, renamed over it at the end */
+    {
+        int len;
+        const char *d;
+        stub_add_remote("/home/test/kit.bck", "old copy", 8);
+        a->act = PANE_REMOTE; key(a, 'J'); key(a, VK_RETURN);       /* re-read the server */
+        go(a, PANE_LOCAL, "KIT.BCK;1");
+        stub_cancel_after(2);
+        key(a, 'P');
+        CHECK(a->mode == M_CONFIRM && a->ask == ASK_REPLACE);
+        key(a, 'Y');
+        CHECK(strstr(a->msg, "Cancelled") != 0);
+        d = stub_remote("/home/test/kit.bck", &len);
+        CHECK(d && len == 8 && !memcmp(d, "old copy", 8));
+        CHECK(!stub_remote_like("/home/test/kit.bck."));
+        /* and one that completes replaces it, leaving no temporary file */
+        key(a, 'P'); key(a, 'Y');
+        d = stub_remote("/home/test/kit.bck", &len);
+        CHECK(d && len == 1536);
+        CHECK(!stub_remote_like("/home/test/kit.bck."));
+    }
 }
 
 static void test_manage(void)

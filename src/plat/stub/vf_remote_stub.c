@@ -56,6 +56,13 @@ const char *stub_remote(const char *path, int *len)
     return n->data ? n->data : "";
 }
 
+int stub_remote_like(const char *prefix)
+{
+    int i;
+    for (i = 0; i < MAXR; i++) if (srv[i].used && !strncmp(srv[i].path, prefix, strlen(prefix))) return 1;
+    return 0;
+}
+
 static void remote_reset(void)
 {
     static char zip[2000];
@@ -223,6 +230,15 @@ unsigned int vfr_rename(vf_remote *r, const char *from, const char *to)
     rnode *n = rfind(from);
     if (!n) { vf_strlcpy(r->err, "No such file", sizeof r->err); return VFR_FAIL; }
     if (rfind(to)) { vf_strlcpy(r->err, "Failure (file exists)", sizeof r->err); return VFR_FAIL; }
+    vf_strlcpy(n->path, to, sizeof n->path);
+    return 1;
+}
+
+unsigned int vfr_replace(vf_remote *r, const char *from, const char *to)
+{
+    rnode *n = rfind(from), *o = rfind(to);
+    if (!n) { vf_strlcpy(r->err, "No such file", sizeof r->err); return VFR_FAIL; }
+    if (o) { free(o->data); o->data = 0; o->used = 0; }
     vf_strlcpy(n->path, to, sizeof n->path);
     return 1;
 }

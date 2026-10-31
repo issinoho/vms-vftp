@@ -47,7 +47,8 @@ unsigned int vfr_stat(vf_remote *r, const char *path, vf_entry *e);
 unsigned int vfr_mkdir(vf_remote *r, const char *path);
 unsigned int vfr_rmdir(vf_remote *r, const char *path);
 unsigned int vfr_unlink(vf_remote *r, const char *path);
-unsigned int vfr_rename(vf_remote *r, const char *from, const char *to);
+unsigned int vfr_rename(vf_remote *r, const char *from, const char *to);   /* never replaces */
+unsigned int vfr_replace(vf_remote *r, const char *from, const char *to);  /* from takes to's place */
 
 unsigned int vfr_open_read(vf_remote *r, const char *path, vfr_file **f);
 /* Up to size bytes; *got 0 at the end. */

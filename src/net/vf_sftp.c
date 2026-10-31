@@ -368,6 +368,17 @@ unsigned int vfr_rename(vf_remote *r, const char *from, const char *to)
                                   LIBSSH2_SFTP_RENAME_ATOMIC | LIBSSH2_SFTP_RENAME_NATIVE) == 0 ? 1 : fail(r, from);
 }
 
+/* OpenSSH's posix-rename replaces in one step. A server without it (SFTP v3 rename
+   never replaces): delete the old file, then rename. */
+unsigned int vfr_replace(vf_remote *r, const char *from, const char *to)
+{
+    unsigned int fl = (unsigned int) strlen(from), tl = (unsigned int) strlen(to);
+    if (libssh2_sftp_posix_rename_ex(r->sftp, from, fl, to, tl) == 0) return 1;
+    if (libssh2_sftp_unlink_ex(r->sftp, to, tl) != 0) return fail(r, to);
+    return libssh2_sftp_rename_ex(r->sftp, from, fl, to, tl, LIBSSH2_SFTP_RENAME_ATOMIC | LIBSSH2_SFTP_RENAME_NATIVE) == 0
+           ? 1 : fail(r, from);
+}
+
 unsigned int vfr_open_read(vf_remote *r, const char *path, vfr_file **out)
 {
     vfr_file *f;
