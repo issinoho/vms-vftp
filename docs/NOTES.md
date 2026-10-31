@@ -116,3 +116,58 @@ user's login, SFTP only, test key only, from the nodes only; started by the user
 - Two `live_unix.sh` runs at once broke each other (the second start reset the
   server's files, the first one's end stopped the server); `unix_sftpd.sh` now
   refuses to start while one runs.
+
+## N8. TCP/IP Services FTP 6.0 on IA64, seen from Linux (2026-10-31, probes/ftp_probe.py)
+
+Run by the user (the password typed, in clear: AUTH TLS is listed by FEAT but
+refused, "500 AUTH command unsuccessful", likely no certificate). x86's FTP
+service is disabled. Before login: FEAT lists only AUTH TLS, PBSZ, PROT (each line
+ending in "."); HELP lists USER PASS SITE MODE TYPE STRU PORT EPRT RETR STOR STOU
+APPE ALLO RNFR RNTO NLST LIST DELE RMD MKD PWD CWD CDUP SYST STAT NOOP HELP ABOR
+PASV EPSV QUIT. OPTS, SIZE, MDTM, REST are "502 unimplemented": **no
+resume, no MLSD; sizes and dates come from LIST only.** SYST needs a login, then
+"200 VMS OpenVMS V8.4 on node ...".
+
+- **Paths are VMS specifications.** PWD: `257 "USER$ROOT:[iain]" is current
+  directory.` (the login directory in the case the account has; after a CWD in
+  upper case). `CWD [.SUB]`, `CWD SUB`, `CWD [-]`, `CDUP` and a full spec work;
+  `CWD SUB/` and `CWD X.DIR` do not. CWD replies `250-CWD command successful.` /
+  `250 New default directory is <spec>`.
+- **LIST is DIRECTORY output**, all versions, highest first: a blank line,
+  `Directory <spec>`, a blank line, entries, a blank line, `Total of N files,
+  used/alloc blocks`. An entry: `NAME.TYPE;V  used/alloc  D-MMM-YYYY HH:MM:SS
+  [GROUP,OWNER]  (S,O,G,W)`; a name too long for its column (about 20) is alone on
+  its line and the rest follows on the next, indented. **Sizes are in blocks
+  only.** Names keep their ODS-5 case and escapes (`^.CONFIG.DIR;1`,
+  `My^_File^.tar.gz;1`). A LIST of nothing is `226` with "Total of 0 files";
+  NLST of nothing is `550 file not found`. NLST gives `NAME.TYPE;V` per line.
+- `SITE VMS` (not the default) turns LIST into DIRECTORY/FULL (File ID, Size,
+  Created, Revised, record format, ...). `SITE UNIX` lists only the highest
+  versions, and NLST then gives lower-case names with no version (`license.`,
+  `build.dir`); PWD stays VMS. VFTP sends neither.
+- **Text:** TYPE A STOR of CRLF lines makes a variable-length file (records); TYPE
+  A RETR gives the records as CRLF lines; TYPE I RETR of the same file gives the
+  record bytes with **no separators at all** (65 bytes for 4 lines). A 300-byte
+  line goes and comes back whole. BUILD_VMS.COM (Stream_LF, put there by
+  sftp) comes in TYPE I as its bytes, LF after each line, 3658 as the 150 reply
+  said. So TYPE I of a text file is useful only for stream files: VFTP gets and
+  puts text in TYPE A. **Binary:** TYPE I STOR makes fixed 512-byte records; RETR
+  in TYPE I gives the bytes back exactly (1031 of 1031); in TYPE A, the last
+  record comes back padded with blanks to 512.
+- The 150 reply to RETR names the file with its version and its size: `150
+  Opening data connection for USER$ROOT:[...]t.txt;2 (192.0.2.20,33202) (74
+  bytes)` (an estimate for text: 4 lines of 65 bytes plus CRLFs is 73). The 150
+  reply to STOR names the file it makes, with its version.
+- **A STOR of an existing name makes a new version** (`t.txt;2`); **RNTO onto an
+  existing name too** (`moved.bin` became `t.txt;3`): nothing is ever replaced.
+- **DELE needs a version**: `DELE x` is "550 The file specification must contain a
+  version number (even if wildcarded)". RMD takes `SUB` (not `SUB.DIR;1`).
+- **Names are sent as plain names; the server adds the ODS-5 escapes.** `STOR My
+  File.tar.gz` made `My^_File^.tar.gz;1`, and `DELE My^_File^.tar.gz;1` failed
+  as `My^^_File^^^.tar.gz;1`: the escapes were escaped again. So a name from the
+  listing is unescaped before it goes in a command. `MKD a]b` made `a^]b.DIR`.
+- PASV: `227 Entering Passive Mode (192,0,2,10,236,21)`; EPSV: `229 Entering
+  Extended Passive Mode (|||60438|)`. Errors are two-line 550s: `550-Failed to
+  open ...` / `550 file not found`. STOU without a data connection waits for one
+  (the first probe run hung there). Each FTP login leaves a
+  TCPIP$FTP_SERVER.LOG in the account's login directory (the server's own).
