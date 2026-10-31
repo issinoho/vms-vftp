@@ -77,3 +77,20 @@ is shown before the transfer.
 The sites file (`VFTP$SITES`, default `SYS$LOGIN:VFTP.SITES`) holds protocol, host,
 port, user, key file and starting directories, never a password. Passwords are
 typed each time and kept only in memory for the connection.
+
+## D10. A password without TLS is sent only when the user says so (2026-10-31, user's choice)
+
+Both nodes' FTP servers list AUTH TLS and refuse it (N8), so a login there sends
+the password unencrypted. Before PASS goes on a connection with no TLS, VFTP asks
+"The password will cross the network unencrypted. Send it? (Y/N) [N]", default No,
+every time. Considered: a warning only (the user's choice is lost in a status
+line); refusing (no FTP at all to these servers).
+
+## D11. The FTP live test logs in to a test account (2026-10-31, user's choice)
+
+PTYDRIVE has to type a password. It is the password of an account made for the
+test (e.g. VFTPTEST, no privileges, its own login directory as the scratch area),
+kept in the git-ignored `tools/live_ftp_pass` like the test key (CLAUDE.md: test
+passwords are made for the test and never committed), and put on the node only
+for the run. The user's own password is never in a script. Considered: anonymous
+FTP (a larger server change); FTP tested by hand only.
