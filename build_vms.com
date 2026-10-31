@@ -21,7 +21,7 @@ $! compiled /NAMES=(AS_IS,SHORTENED) so that they all agree.
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES" -
          + "/NAMES=(AS_IS,SHORTENED)" -
          + "/INCLUDE=([.src.core],[.src.app],[.src.net],[.src.plat],[.src.plat.vms],[.src.plat.stub],''ssh2inc')"
-$ core = "vf_util,vf_edit,vf_screen,vf_ansi,vf_pane,vf_path,vf_text"
+$ core = "vf_util,vf_edit,vf_screen,vf_ansi,vf_pane,vf_path,vf_text,vf_ftpcore"
 $ app = "vf_app,vf_draw"
 $ i = 0
 $ core_loop:
@@ -58,6 +58,8 @@ $ if p1 .nes. "TEST" then exit 1
 $!
 $ cc'cflags'/object=[.build]test_core.obj [.tests.unit]test_core.c
 $ if $severity .ne. 1 then goto failed
+$ cc'cflags'/object=[.build]test_ftp.obj [.tests.unit]test_ftp.c
+$ if $severity .ne. 1 then goto failed
 $ cc'cflags'/object=[.build]test_app.obj [.tests.unit]test_app.c
 $ if $severity .ne. 1 then goto failed
 $ cc'cflags'/object=[.build]vf_plat_stub.obj [.src.plat.stub]vf_plat_stub.c
@@ -67,10 +69,14 @@ $ if $severity .ne. 1 then goto failed
 $ set default [.build]
 $ link/executable=test_core.exe test_core.obj,'core'
 $ if $severity .ne. 1 then goto failed_up
+$ link/executable=test_ftp.exe test_ftp.obj,'core'
+$ if $severity .ne. 1 then goto failed_up
 $ link/executable=test_app.exe test_app.obj,vf_plat_stub.obj,vf_remote_stub.obj,'core','app'
 $ if $severity .ne. 1 then goto failed_up
 $ set default [-]
 $ run [.build]test_core
+$ if .not. $status then goto failed
+$ run [.build]test_ftp
 $ if .not. $status then goto failed
 $ run [.build]test_app
 $ if .not. $status then goto failed
