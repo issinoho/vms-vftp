@@ -4,3 +4,4 @@ out/
 tools/nodes.conf
 tools/__pycache__/
 tools/live_key*
+tools/live_ftp_pass
