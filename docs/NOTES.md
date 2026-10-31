@@ -90,3 +90,29 @@ sides. `COPY A,A A` does not double A: its second input is the new, empty versio
   now 60 s. Once the sshd master sat in a loop for 95 minutes (seen by SHOW
   PROCESS, stopped by the user). After a full live run no sshd job outlives it
   (`probes/sshd_socks.com`), so VFTP's sessions do close.
+
+## N7. Across nodes, and against a Unix server (2026-10-31)
+
+Across nodes (`tools/live.sh <node> --server <node2>`, both directions; the test
+key's `from=` widened to the two nodes by the user): the same session as N5 against
+the other node's sshd. R.BIN byte for byte (MD5 the same on both nodes), R.TXT as
+lines, Get and Put of 10 MB cancelled (Get 47%, Put 6% and 13%), the server's
+BIG.BIN;1 unchanged.
+
+Against OpenSSH 10.2 on Linux (`tools/live_unix.sh`, a private sshd under the
+user's login, SFTP only, test key only, from the nodes only; started by the user):
+- **A replacing Put lost the old file when cancelled.** A Unix server has no
+  versions, so a Put of a name it has asks first; after Y, opening the file for
+  writing truncated it and the cancel deleted it. Found by reading `put_one`, shown
+  by `test_app`, fixed: the Put writes `name.vftp-part` and replaces the old file
+  only when complete. Both nodes, from the server's journal (`internal-sftp -l
+  INFO`, which logs to syslog, not to sshd's `-E` file): `big.bin.vftp-part`
+  opened and removed on Ctrl/C, `big.bin` never opened to write (MD5 unchanged);
+  "Replace them?" N wrote nothing; Y wrote `u.txt.vftp-part` and `posix-rename`d
+  it over `u.txt`.
+- Downloads: r.bin byte for byte (MD5), r.txt (LF lines) as VMS text records. U.TXT
+  put as LF lines. Rename, mkdir (`SUBDIR/` shown with a slash), enter and leave
+  it, delete: all as on VMS.
+- Two `live_unix.sh` runs at once broke each other (the second start reset the
+  server's files, the first one's end stopped the server); `unix_sftpd.sh` now
+  refuses to start while one runs.
