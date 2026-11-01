@@ -31,7 +31,7 @@ panes holds the statistics, transfer mode and connection state; during a
 transfer it shows the progress bar, rate and time left. At 132 columns the panes
 show full dates, protections or permissions, and owners.
 
-## Keys (proposed; settled in Phase 1)
+## Keys (accepted; `C`/F5 and Backspace are still to build)
 
 | Key | Action |
 |---|---|
@@ -49,6 +49,7 @@ show full dates, protections or permissions, and owners.
 | `T`, Space | tag / untag; GOLD `T` tag all, GOLD `U` untag all, `*` tag by wildcard |
 | `V` | view a text file (local, or remote fetched to SYS$SCRATCH) |
 | `A` | attributes: protection (local) or permissions (remote), dates, owner |
+| GOLD `A` | change a server's permissions (644, rw-r--r--, go-w) |
 | `X` | transfer mode: AUTO, ASCII, BINARY (D6) |
 | `S` | sort by name, size, date, type |
 | `F`, Find | filter by wildcard |

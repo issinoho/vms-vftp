@@ -43,7 +43,7 @@ parsers anyway; a large dependency); driving TCP/IP Services' FTP client
 SFTP first (with the libssh2 port in Phase 0), FTP in Phase 2, SCP and the rest
 in Phase 3. Considered: FTP first (no porting, sooner to try).
 
-## D6. Text and binary transfers (2026-10-25, proposed)
+## D6. Text and binary transfers (2026-10-25, accepted)
 
 Mode AUTO (default), ASCII or BINARY, shown in the strip and set with `X`.
 - Upload: in AUTO a local file with variable-length or VFC records and carriage
@@ -56,7 +56,7 @@ Mode AUTO (default), ASCII or BINARY, shown in the strip and set with `X`.
 To be checked by the Phase 0 probes; the alternative for downloads is Stream_LF
 for everything (no choice to make, but binary files then read badly in VMS tools).
 
-## D7. Host keys and keys: VSI OpenSSH's files (2026-10-25, proposed)
+## D7. Host keys and keys: VSI OpenSSH's files (2026-10-25, accepted)
 
 VFTP reads and adds to the known_hosts that VSI's ssh uses, and offers the keys
 VSI's ssh would (`id_ed25519`, `id_ecdsa`, `id_rsa`), so trust and keys are shared.
@@ -64,7 +64,7 @@ An unknown host shows its key fingerprint (SHA-256, as ssh does) and asks; a
 changed key refuses to connect. The files are in `SYS$LOGIN:[.SSH]` (N3), and libssh2
 reads them as they are.
 
-## D8. Local files: VMS specifications (2026-10-25, proposed)
+## D8. Local files: VMS specifications (2026-10-25, accepted)
 
 The local pane shows VMS specifications (`DKA0:[IAIN]NOTES.TXT;1`), the latest
 version by default and every version on request, as VTREE. A downloaded file is
@@ -72,7 +72,7 @@ always a new version, never a replacement. Remote names that are not valid on
 ODS-5 (or on ODS-2 on such a disk) are changed by a stated rule and the new name
 is shown before the transfer.
 
-## D9. No stored passwords (2026-10-25, proposed)
+## D9. No stored passwords (2026-10-25, accepted)
 
 The sites file (`VFTP$SITES`, default `SYS$LOGIN:VFTP.SITES`) holds protocol, host,
 port, user, key file and starting directories, never a password. Passwords are
