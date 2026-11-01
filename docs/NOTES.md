@@ -206,3 +206,17 @@ Logged in as the test account VFTPTEST (D11) to localhost:21 on x86 and on IA64
   The title and status line said SFTP on an FTP connection.
 - On x86 the workdir and [VFTPTEST] are on different disks: RENAME cannot move a
   file between them (the test's setup now copies).
+
+## N11. VFTP over FTP to a Unix server (2026-11-01, tools/live_unix_ftp.sh)
+
+pyftpdlib 2.0.1 on this Linux machine (tools/unix_ftpd.py, in out/ftpd-venv; one
+login, vftptest with the test password; only from the nodes; run by the user), from
+x86 and from IA64, one after the other. SYST "215 UNIX Type: L8", PWD "/": Unix
+paths. LIST is ls -l lines, as test_ftp.c has them. All ten checks on both nodes:
+- The replacing Put that is cancelled: the server's log has only `STOR
+  big.bin.vftp-part` and `DELE big.bin.vftp-part`; big.bin is unchanged by MD5.
+- "Replace them?" N writes nothing; Y: `STOR u.txt.vftp-part`, `RNFR
+  u.txt.vftp-part`, `RNTO u.txt` (pyftpdlib's RNTO replaces, so no DELE).
+- r.bin byte for byte (TYPE I), r.txt as records (TYPE A); U.TXT as LF lines;
+  MKD, CWD in and out, rename (SIZE first: 550, so no file is in the way), DELE.
+- pyftpdlib logs `PASS ******`; the password is in no output.
