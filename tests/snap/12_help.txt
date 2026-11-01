@@ -9,8 +9,9 @@
 │ CONNECTION                                                                   │
 │   O                            open (SFTP or FTP); GOLD O closes it          │
 │ FILES                                                                        │
-│   G  Get                       download the tagged (or current) remote files │
-│   P  Put                       upload the tagged (or current) local files    │
+│   G  Get                       download the tagged (or current) entries      │
+│   P  Put                       upload the tagged (or current) entries        │
+│                                (a directory goes whole, all that is in it)   │
 │   C, F5  Copy                  to the other pane (Get or Put)                │
 │   D, Remove  Delete            asks first; local: the versions named only    │
 │   R  Rename    M  Make directory    V  View    A  Attributes                 │
@@ -18,7 +19,6 @@
 │   X  Transfer mode             AUTO, ASCII, BINARY                           │
 │   S  Sort   F, Find  Filter    GOLD V every version / highest only (local)   │
 │   GOLD W, Ctrl/W               read both panes again; redraw                 │
-│   F10, Ctrl/Z                  exit (a transfer: F10, Ctrl/Z, Ctrl/C cancel) │
 └───────────────────────────────────────────────────────────────────── more ───┘
  HELP  Up/Down Prev/Next scroll
  COMMANDS  Any other key returns

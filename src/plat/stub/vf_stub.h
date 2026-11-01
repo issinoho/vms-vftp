@@ -13,6 +13,8 @@ void stub_add_local(const char *dir, const char *name, int text, const char *dat
 const char *stub_remote(const char *path, int *len);
 int stub_remote_like(const char *prefix);  /* 1 if any remote path starts with prefix */
 void stub_add_remote(const char *path, const char *data, int len);
+void stub_add_remote_dir(const char *path);
+void stub_add_remote_link(const char *path);   /* a link to a directory (SFTP lists it so) */
 void stub_trust(int on);                 /* the server's key in known_hosts or not */
 void stub_change_key(int on);            /* the server's key differs from known_hosts */
 void stub_ftps(int on);                  /* FTP takes AUTH TLS, its certificate not yet known */

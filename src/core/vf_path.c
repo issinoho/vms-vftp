@@ -1,6 +1,7 @@
 /* vf_path.c - names and paths on both sides. No I/O. */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include "vf_path.h"
 #include "vf_util.h"
@@ -159,6 +160,42 @@ int vf_local_name(const char *remote, int ods5, char *out, size_t size)
     name[o] = '\0';
     if (!name[0]) { vf_strlcpy(name, "UNNAMED", sizeof name); changed = 1; }
     vf_strlcpy(out, name, size);
+    return changed;
+}
+
+int vf_version(const char *name, char *base, size_t size)
+{
+    const char *semi = strrchr(name, ';'), *p;
+    vf_strlcpy(base, name, size);
+    if (!semi || !semi[1]) return -1;
+    for (p = semi + 1; *p; p++) if (!isdigit((unsigned char) *p)) return -1;
+    if ((size_t) (semi - name) < size) base[semi - name] = '\0';
+    return atoi(semi + 1);
+}
+
+void vf_dirbase(const char *entry, char *out, size_t size)
+{
+    char b[300];
+    size_t n;
+    if (vf_version(entry, b, sizeof b) >= 0 && (n = strlen(b)) > 4 && !vf_strcasecmp(b + n - 4, ".DIR")) {
+        b[n - 4] = '\0';
+        vf_strlcpy(out, b, size);
+        return;
+    }
+    vf_strlcpy(out, entry, size);
+}
+
+int vf_local_dirname(const char *remote, int ods5, char *out, size_t size)
+{
+    char t[260];
+    size_t n;
+    int changed;
+    /* with a dot added at the end every dot of the name is "not the last" */
+    snprintf(t, sizeof t, "%s.", remote);
+    changed = vf_local_name(t, ods5, out, size);
+    n = strlen(out);
+    if (n && out[n - 1] == '.') out[n - 1] = '\0';
+    if (!out[0]) { vf_strlcpy(out, "UNNAMED", size); changed = 1; }
     return changed;
 }
 

@@ -110,6 +110,19 @@ static void test_path(void)
     vf_local_name(".profile", 1, b, sizeof b); CHECKS(b, ".profile");
     CHECK(vf_local_name("my file.tar.gz", 0, b, sizeof b)); CHECKS(b, "MY_FILE_TAR.GZ");
     CHECK(!vf_local_name("notes.txt", 0, b, sizeof b)); CHECKS(b, "NOTES.TXT");
+    CHECK(vf_version("R.TXT;3", b, sizeof b) == 3); CHECKS(b, "R.TXT");
+    CHECK(vf_version("notes.txt", b, sizeof b) == -1); CHECKS(b, "notes.txt");
+    CHECK(vf_version("odd;name", b, sizeof b) == -1); CHECKS(b, "odd;name");
+    vf_dirbase("SUB.DIR;1", b, sizeof b); CHECKS(b, "SUB");
+    vf_dirbase("work.DIR;1", b, sizeof b); CHECKS(b, "work");
+    vf_dirbase("data", b, sizeof b); CHECKS(b, "data");
+    vf_dirbase("my.dir", b, sizeof b); CHECKS(b, "my.dir");
+    /* a directory's name: no dot may stay, it would start a subdirectory */
+    CHECK(!vf_local_dirname("data", 1, b, sizeof b)); CHECKS(b, "data");
+    CHECK(vf_local_dirname("v1.2.3", 1, b, sizeof b)); CHECKS(b, "v1^.2^.3");
+    CHECK(vf_local_dirname("my dir", 1, b, sizeof b)); CHECKS(b, "my^_dir");
+    CHECK(!vf_local_dirname("data", 0, b, sizeof b)); CHECKS(b, "DATA");
+    CHECK(vf_local_dirname("v1.2", 0, b, sizeof b)); CHECKS(b, "V1_2");
     vf_remote_name("NOTES.TXT;1", b, sizeof b); CHECKS(b, "notes.txt");
     vf_remote_name("LICENSE.;1", b, sizeof b); CHECKS(b, "license");
     vf_remote_name("ReadMe.md;2", b, sizeof b); CHECKS(b, "ReadMe.md");

@@ -229,10 +229,10 @@ unsigned int vfp_mkdir(const char *dir)
 {
     char parent[128], name[96], dname[100];
     const char *lb;
-    if (dir_exists(dir)) return ST_DUP;
+    if (dir_exists(dir)) return 1;        /* as LIB$CREATE_DIR: SS$_NORMAL, nothing made */
     if (!vf_lparent(dir, parent, sizeof parent) || !dir_exists(parent)) return ST_DNF;
-    lb = strrchr(dir, '.');
-    if (!lb || lb < strchr(dir, '[')) lb = strchr(dir, '[');
+    /* the last element: after the parent's "DEV:[A.B" and its "." ("^." is in a name) */
+    lb = strstr(parent, "[000000]") ? strchr(dir, '[') : dir + strlen(parent) - 1;
     vf_strlcpy(name, lb + 1, sizeof name);
     name[strlen(name) - 1] = '\0';
     snprintf(dname, sizeof dname, "%s.DIR", name);

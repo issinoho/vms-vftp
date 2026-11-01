@@ -185,11 +185,14 @@ int vf_app_init(vf_app *a, const char *target, int rows, int cols)
     return 1;
 }
 
+static void steps_free(vf_app *a);
+
 void vf_app_free(vf_app *a)
 {
     if (a->rem) vfr_disconnect(a->rem);
     a->rem = 0;
     text_free(a);
+    steps_free(a);
     vf_pane_free(&a->pane[0]);
     vf_pane_free(&a->pane[1]);
     vf_screen_free(&a->scr);
@@ -476,25 +479,30 @@ static int want_text(vf_app *a, const char *name)
     return vf_text_type(name, a->text_types[0] ? a->text_types : 0);
 }
 
-/* Download one remote entry into the local directory. 1 on success. */
-static int get_one(vf_app *a, const vf_entry *e, char *err, int esz)
+/* The last element of a step's name ("data/big.log" -> "big.log"). */
+static const char *leaf(const char *name)
 {
-    char rpath[VF_SPEC_MAX], lname[300], lspec[VF_SPEC_MAX], result[VF_SPEC_MAX];
+    const char *s = strrchr(name, '/');
+    return s ? s + 1 : name;
+}
+
+/* Download one file step. 1 on success. */
+static int get_one(vf_app *a, const vf_step *s, char *err, int esz)
+{
+    const char *rpath = s->src, *lspec = s->dst;
+    char result[VF_SPEC_MAX];
     static char buf[CHUNK];
     vfr_file *rf;
     vfp_file *lf;
     unsigned int st;
     int got, text;
-    vf_xfile(a->rvms, a->pane[PANE_REMOTE].dir, e->name, rpath, sizeof rpath);
-    vf_local_name(e->name, a->ods5, lname, sizeof lname);
-    vf_lfile(a->pane[PANE_LOCAL].dir, lname, lspec, sizeof lspec);
-    text = want_text(a, e->name);
+    text = want_text(a, leaf(s->name));
     a->xfer_text = text;
-    vf_strlcpy(a->xfer_name, e->name, sizeof a->xfer_name);
-    a->xfer_done = 0; a->xfer_total = e->size;
+    vf_strlcpy(a->xfer_name, s->name, sizeof a->xfer_name);
+    a->xfer_done = 0; a->xfer_total = s->size;
     st = vfr_open_read(a->rem, rpath, text, &rf);
-    if (!(st & 1)) { snprintf(err, (size_t) esz, "%s: %s", e->name, vfr_error(a->rem)); return 0; }
-    st = vfp_open_write(lspec, text, e->size, &lf, result, sizeof result);
+    if (!(st & 1)) { snprintf(err, (size_t) esz, "%s: %s", s->name, vfr_error(a->rem)); return 0; }
+    st = vfp_open_write(lspec, text, s->size, &lf, result, sizeof result);
     if (!(st & 1)) {
         char m[200];
         vfr_close(rf);
@@ -506,7 +514,7 @@ static int get_one(vf_app *a, const vf_entry *e, char *err, int esz)
     progress(a, 1);
     for (;;) {
         st = vfr_read(rf, buf, sizeof buf, &got);
-        if (!(st & 1)) { snprintf(err, (size_t) esz, "%s: %s", e->name, vfr_error(a->rem)); break; }
+        if (!(st & 1)) { snprintf(err, (size_t) esz, "%s: %s", s->name, vfr_error(a->rem)); break; }
         if (got == 0) {
             if (text) st = vf_lines_end(&a->lines, write_rec, lf);
             break;
@@ -541,34 +549,28 @@ static int get_one(vf_app *a, const vf_entry *e, char *err, int esz)
     return 1;
 }
 
-/* Upload one local entry into the remote directory. 1 on success. A file that
-   replaces one (a server without versions; the user said Y) is written under a
-   temporary name and renamed over the old one at the end, so a cancel or a failure
-   leaves the old file as it was. */
-static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
+/* Upload one file step. 1 on success. A file that replaces one (a server without
+   versions; the user said Y) is written under a temporary name and renamed over
+   the old one at the end, so a cancel or a failure leaves the old file as it was. */
+static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
 {
-    char lspec[VF_SPEC_MAX], rname[300], rpath[VF_SPEC_MAX], wpath[VF_SPEC_MAX];
-    const vf_entry *old;
-    int replacing;
+    const char *lspec = s->src, *rpath = s->dst;
+    char wpath[VF_SPEC_MAX];
+    int replacing = s->exists;
     static char buf[CHUNK + 1], out[CHUNK + 2];
     vfr_file *rf;
     vfp_file *lf;
     unsigned int st;
     int got, text = a->xmode == X_ASCII ? 1 : a->xmode == X_BINARY ? 0 : -1, olen = 0;
     unsigned long long est;
-    vf_lfile(a->pane[PANE_LOCAL].dir, e->name, lspec, sizeof lspec);
-    vf_remote_name(e->name, rname, sizeof rname);
-    vf_xfile(a->rvms, a->pane[PANE_REMOTE].dir, rname, rpath, sizeof rpath);
-    old = vf_pane_find(&a->pane[PANE_REMOTE], rname);
-    replacing = old && !old->is_parent && !old->is_dir;
     if (replacing) snprintf(wpath, sizeof wpath, "%s" PART, rpath);
     else vf_strlcpy(wpath, rpath, sizeof wpath);
-    vf_strlcpy(a->xfer_name, e->name, sizeof a->xfer_name);
+    vf_strlcpy(a->xfer_name, s->name, sizeof a->xfer_name);
     st = vfp_open_read(lspec, &text, &est, &lf);
     if (!(st & 1)) {
         char m[200];
         status_text(st, m, sizeof m);
-        snprintf(err, (size_t) esz, "%s: %s", e->name, m);
+        snprintf(err, (size_t) esz, "%s: %s", lspec, m);
         return 0;
     }
     a->xfer_text = text;
@@ -586,7 +588,7 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
         if (!(st & 1)) {
             char m[200];
             status_text(st, m, sizeof m);
-            snprintf(err, (size_t) esz, "%s: %s", e->name, m);
+            snprintf(err, (size_t) esz, "%s: %s", lspec, m);
             break;
         }
         if (text) {
@@ -621,7 +623,7 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
         return 0;
     }
     if (replacing && !(vfr_replace(a->rem, wpath, rpath) & 1)) {
-        snprintf(err, (size_t) esz, "%s: %s (the new copy is %s" PART ")", rpath, vfr_error(a->rem), rname);
+        snprintf(err, (size_t) esz, "%s: %s (the new copy is %s" PART ")", rpath, vfr_error(a->rem), leaf(s->name));
         logf_("PUT %s -> %s FAILED: %s", lspec, rpath, err);
         return 0;
     }
@@ -629,74 +631,332 @@ static int put_one(vf_app *a, const vf_entry *e, char *err, int esz)
     return 1;
 }
 
+/* ---------- what a transfer copies: the steps (D13) ---------- */
+
+static void steps_free(vf_app *a)
+{
+    int i;
+    for (i = 0; i < a->nsteps; i++) { free(a->steps[i].name); free(a->steps[i].src); free(a->steps[i].dst); }
+    free(a->steps);
+    a->steps = 0; a->nsteps = a->capsteps = 0;
+}
+
+static char *dup_str(const char *s)
+{
+    size_t n = strlen(s) + 1;
+    char *d = (char *) malloc(n);
+    if (d) memcpy(d, s, n);
+    return d;
+}
+
+/* Returns the step's index; -1 when there are too many (or no memory), -2 when a
+   path did not fit (it would have been cut short: the wrong file). */
+static int step_add(vf_app *a, int is_dir, int parent, int top, const char *name,
+                    const char *src, const char *dst, unsigned long long size, int exists)
+{
+    vf_step *s;
+    if (strlen(src) >= VF_SPEC_MAX - 1 || strlen(dst) >= VF_SPEC_MAX - 1) return -2;
+    if (a->nsteps == a->capsteps) {
+        int cap = a->capsteps ? a->capsteps * 2 : 64;
+        vf_step *n;
+        if (cap > VF_MAXSTEPS) cap = VF_MAXSTEPS;
+        if (cap <= a->nsteps) return -1;
+        n = (vf_step *) realloc(a->steps, (size_t) cap * sizeof *n);
+        if (!n) return -1;
+        a->steps = n; a->capsteps = cap;
+    }
+    s = &a->steps[a->nsteps];
+    memset(s, 0, sizeof *s);
+    s->is_dir = is_dir; s->exists = exists; s->parent = parent; s->top = top; s->size = size;
+    s->name = dup_str(name); s->src = dup_str(src); s->dst = dup_str(dst);
+    if (!s->name || !s->src || !s->dst) { free(s->name); free(s->src); free(s->dst); return -1; }
+    return a->nsteps++;
+}
+
+static int step_fail(vf_app *a, int why, const char *name)
+{
+    if (why == -2) vf_set_msg(a, 1, "Nothing copied: a path below %s is too long", name);
+    else vf_set_msg(a, 1, "Nothing copied: more than %d files and directories at once", VF_MAXSTEPS);
+    return 0;
+}
+
+/* A directory's entries in a pane of their own, sorted (a VMS server's versions
+   highest first). 0 when it cannot be read: the message says why. */
+static vf_pane *listing(vf_app *a, int remote, const char *dir)
+{
+    vf_pane *p = (vf_pane *) malloc(sizeof *p);
+    unsigned int st;
+    char m[200];
+    if (!p) { vf_set_msg(a, 1, "Nothing copied: no memory to read %s", dir); return 0; }
+    vf_pane_init(p, !remote);
+    if (remote) p->vms = a->rvms;
+    vf_strlcpy(p->dir, dir, sizeof p->dir);
+    st = remote ? vfr_list(a->rem, dir, add_local, p) : vfp_list(dir, 0, add_local, p);
+    if (!(st & 1)) {
+        if (remote) vf_strlcpy(m, vfr_error(a->rem), sizeof m); else status_text(st, m, sizeof m);
+        vf_set_msg(a, 1, "Nothing copied: %s could not be read: %s", dir, m);
+        vf_pane_free(p); free(p);
+        return 0;
+    }
+    vf_pane_rebuild(p);
+    return p;
+}
+
+static void listing_free(vf_pane *p) { if (p) { vf_pane_free(p); free(p); } }
+
+/* While the directories are read: how many so far, and F10 to stop. */
+static void scan_poll(vf_app *a, const char *where)
+{
+    double now = vfp_clock();
+    int k;
+    if (now - a->scan_drawn < 0.25) return;
+    a->scan_drawn = now;
+    vf_set_msg(a, 0, "Reading %s: %d so far (F10 cancels)", where, a->nsteps);
+    vf_app_draw(a);
+    vfp_draw(&a->scr);
+    while ((k = vfp_key(0)) != VK_TIMEOUT) {
+        if (k == VK_F10 || k == VK_CTRL_Z || k == 3) a->cancel = 1;
+        else if (k == VK_CTRL_W) vfp_repaint();
+    }
+}
+
+/* Directory dn in a listing: "dn", or "DN.DIR;1" as a VMS server lists one by
+   FTP or by SFTP (N2), matched case-blind then, as VMS does. */
+static const vf_entry *find_dir(const vf_pane *p, const char *dn)
+{
+    char b[300];
+    int i;
+    for (i = 0; i < p->n; i++) {
+        const vf_entry *e = &p->e[i];
+        if (e->is_parent) continue;
+        if (!strcmp(e->name, dn)) return e;
+        vf_dirbase(e->name, b, sizeof b);
+        if (strcmp(b, e->name) && !vf_strcasecmp(b, dn)) return e;
+    }
+    return 0;
+}
+
+/* A VMS server lists every version (N2, N8): is there a higher one of e? */
+static int older_version(const vf_pane *p, const vf_entry *e)
+{
+    char b[256], c[256];
+    int v = vf_version(e->name, b, sizeof b), i;
+    if (v < 0) return 0;
+    for (i = 0; i < p->n; i++)
+        if (!p->e[i].is_dir && vf_version(p->e[i].name, c, sizeof c) > v && !vf_strcasecmp(b, c)) return 1;
+    return 0;
+}
+
+/* Add the steps for entry e of directory sdir, copied into directory ddir. dlist:
+   ddir's entries when ddir is there already, else 0.
+   A directory brings what is in it, to VF_MAXDEPTH levels; a link to a directory
+   is not followed (it may lead back up). Returns 0 when the scan stops: cancelled,
+   too many steps, or a directory that cannot be read (the message says which). */
+static int scan(vf_app *a, int get, const char *sdir, const char *ddir, const vf_entry *e,
+                vf_pane *dlist, int parent, int top, const char *prefix, int depth)
+{
+    char name[600], src[VF_SPEC_MAX], dst[VF_SPEC_MAX], nm[300], dn[300], ddirn[VF_SPEC_MAX];
+    const vf_entry *old;
+    vf_pane *from, *there = 0;
+    int idx, exists = 0, i;
+    if (!e->is_dir) {
+        if (get) {
+            vf_xfile(a->rvms, sdir, e->name, src, sizeof src);
+            vf_local_name(e->name, a->ods5, nm, sizeof nm);
+            vf_lfile(ddir, nm, dst, sizeof dst);
+            vf_strlcpy(nm, e->name, sizeof nm);
+        } else {
+            vf_lfile(sdir, e->name, src, sizeof src);
+            vf_remote_name(e->name, nm, sizeof nm);
+            vf_xfile(a->rvms, ddir, nm, dst, sizeof dst);
+            old = dlist ? vf_pane_find(dlist, nm) : 0;
+            exists = old && !old->is_parent && !old->is_dir;
+        }
+        snprintf(name, sizeof name, "%s%s%s", prefix, prefix[0] ? "/" : "", nm);
+        if ((idx = step_add(a, 0, parent, top, name, src, dst, e->size, exists)) < 0)
+            return step_fail(a, idx, prefix[0] ? prefix : nm);
+        return 1;
+    }
+    if (e->is_link) { a->scan_links++; return 1; }      /* not followed: it may lead back up */
+    if (depth >= VF_MAXDEPTH) { a->scan_deep++; return 1; }
+    if (get) {
+        vf_dirbase(e->name, dn, sizeof dn);              /* "data"; "SUB.DIR;1" -> "SUB" */
+        if (a->rvms) vf_xsubdir(1, sdir, e->name, src, sizeof src);
+        else vf_rjoin(sdir, dn, src, sizeof src);
+        vf_local_dirname(dn, a->ods5, nm, sizeof nm);
+        vf_lsubdir(ddir, nm, ddirn, sizeof ddirn);
+        vf_strlcpy(dst, ddirn, sizeof dst);              /* vfp_mkdir takes the spec */
+        old = dlist ? find_dir(dlist, nm) : 0;
+        exists = old && old->is_dir;
+    } else {
+        vf_ldirname(e->name, nm, sizeof nm);            /* "WORK.DIR;1" -> "WORK" */
+        vf_remote_name(nm, dn, sizeof dn);               /* -> "work" */
+        vf_lsubdir(sdir, nm, src, sizeof src);
+        vf_xfile(a->rvms, ddir, dn, dst, sizeof dst);    /* what vfr_mkdir takes */
+        if (a->rvms) vf_lsubdir(ddir, dn, ddirn, sizeof ddirn);
+        else vf_strlcpy(ddirn, dst, sizeof ddirn);
+        old = dlist ? find_dir(dlist, dn) : 0;
+        if (old && !old->is_dir) {
+            vf_set_msg(a, 1, "Nothing copied: %s is a file on the server, not a directory", old->name);
+            return 0;
+        }
+        exists = old != 0;
+    }
+    snprintf(name, sizeof name, "%s%s%s", prefix, prefix[0] ? "/" : "", dn);
+    if (strlen(ddirn) >= VF_SPEC_MAX - 1) return step_fail(a, -2, name);
+    if ((idx = step_add(a, 1, parent, top, name, src, dst, 0, exists)) < 0) return step_fail(a, idx, name);
+    scan_poll(a, name);
+    if (a->cancel) return 0;
+    if (!(from = listing(a, get, src))) return 0;
+    if (exists && !(there = listing(a, !get, ddirn))) { listing_free(from); return 0; }
+    for (i = 0; i < from->nvis; i++) {
+        const vf_entry *c = &from->e[from->vis[i]];
+        if (c->is_parent || (!c->is_dir && older_version(from, c))) continue;   /* the highest only */
+        if (!scan(a, get, src, ddirn, c, there, idx, top, name, depth + 1)) {
+            listing_free(from); listing_free(there);
+            return 0;
+        }
+    }
+    listing_free(from); listing_free(there);
+    return 1;
+}
+
+/* After a transfer: what the scan left out, on the end of the message. */
+static void note_left_out(vf_app *a)
+{
+    char m[256], x[160];
+    x[0] = '\0';
+    if (a->scan_links)
+        snprintf(x, sizeof x, "%d link%s to a directory not followed", a->scan_links, a->scan_links == 1 ? "" : "s");
+    if (a->scan_deep)
+        snprintf(x + strlen(x), sizeof x - strlen(x), "%s%d director%s deeper than %d levels left out",
+                 x[0] ? ", " : "", a->scan_deep, a->scan_deep == 1 ? "y" : "ies", VF_MAXDEPTH);
+    if (!x[0]) return;
+    vf_strlcpy(m, a->msg, sizeof m);
+    vf_set_msg(a, 1, "%s; %s", m, x);
+}
+
 static void run_transfer(vf_app *a)
 {
     vf_pane *src = &a->pane[a->ops_pane];
-    int i, ok = 0, failed = 0;
-    char err[512], first[600];
+    int i, ok = 0, failed = 0, made = 0, files = 0;
+    char err[512], first[600], m[200];
+    unsigned char *bad;
     double t0 = vfp_clock(), secs;
+    unsigned int st;
     first[0] = '\0';
-    a->xfer_on = 1; a->xfer_get = a->ops_get; a->xfer_n = a->nops;
+    a->batch_total = 0;
+    for (i = 0; i < a->nsteps; i++)
+        if (!a->steps[i].is_dir) { files++; a->batch_total += a->steps[i].size; }
+    a->xfer_on = 1; a->xfer_get = a->ops_get; a->xfer_n = files; a->xfer_i = 0;
     a->cancel = 0; a->batch_done = 0; a->xfer_t0 = t0; a->xfer_drawn = 0;
-    for (i = 0; i < a->nops && !a->cancel; i++) {
-        vf_entry e = src->e[a->ops[i]];
-        a->xfer_i = i + 1;
+    for (i = 0; i < a->nsteps && !a->cancel; i++) {
+        vf_step *s = &a->steps[i];
         err[0] = '\0';
-        if (a->ops_get ? get_one(a, &e, err, sizeof err) : put_one(a, &e, err, sizeof err)) {
-            ok++;
-            src->e[a->ops[i]].tagged = 0;
-        } else {
+        if (s->parent >= 0 && a->steps[s->parent].failed) {     /* its directory was not made */
+            s->failed = 1;
+            if (!s->is_dir) failed++;
+            continue;
+        }
+        if (s->is_dir) {
+            if (!s->exists) {
+                st = a->ops_get ? vfp_mkdir(s->dst) : vfr_mkdir(a->rem, s->dst);
+                if (!(st & 1)) {
+                    if (a->ops_get) status_text(st, m, sizeof m); else vf_strlcpy(m, vfr_error(a->rem), sizeof m);
+                    s->failed = 1;
+                    logf_("MKDIR %s FAILED: %s", s->dst, m);
+                    if (!first[0]) snprintf(first, sizeof first, "%s: %s", s->name, m);
+                    continue;
+                }
+                logf_("MKDIR %s", s->dst);
+                made++;
+            }
+            s->done = 1;
+            continue;
+        }
+        a->xfer_i++;
+        if (a->ops_get ? get_one(a, s, err, sizeof err) : put_one(a, s, err, sizeof err)) { ok++; s->done = 1; }
+        else {
             failed++;
+            s->failed = 1;
             if (!first[0]) vf_strlcpy(first, err, sizeof first);
         }
     }
     a->xfer_on = 0;
     secs = vfp_clock() - t0;
+    /* untag what went across whole */
+    if ((bad = (unsigned char *) calloc((size_t) a->nops + 1, 1)) != 0) {
+        for (i = 0; i < a->nsteps; i++) if (!a->steps[i].done) bad[a->steps[i].top] = 1;
+        for (i = 0; i < a->nops; i++) if (!bad[i]) src->e[a->ops[i]].tagged = 0;
+        free(bad);
+    }
     reread(a, a->ops_get ? PANE_LOCAL : PANE_REMOTE);
     if (a->ops_get) vf_pane_rebuild(&a->pane[PANE_REMOTE]); else vf_pane_rebuild(&a->pane[PANE_LOCAL]);
     if (a->cancel)
         vf_set_msg(a, 1, "Cancelled after %d file%s; the file being moved was not kept", ok, ok == 1 ? "" : "s");
-    else if (failed)
+    else if (failed || first[0])
         vf_set_msg(a, 1, "%d copied, %d failed: %s", ok, failed, first);
     else {
-        char b[16], r[16];
+        char b[16], r[16], d[48];
         vf_fmt_bytes(a->batch_done, b, sizeof b);
         vf_fmt_bytes(secs > 0.01 ? (unsigned long long) ((double) a->batch_done / secs) : a->batch_done, r, sizeof r);
-        vf_set_msg(a, 0, "%s %d file%s, %s bytes in %.1f s (%s/s)", a->ops_get ? "Got" : "Put",
-                   ok, ok == 1 ? "" : "s", b, secs, r);
+        d[0] = '\0';
+        if (made) snprintf(d, sizeof d, ", %d director%s made", made, made == 1 ? "y" : "ies");
+        vf_set_msg(a, 0, "%s %d file%s%s, %s bytes in %.1f s (%s/s)", a->ops_get ? "Got" : "Put",
+                   ok, ok == 1 ? "" : "s", d, b, secs, r);
     }
+    note_left_out(a);
+    steps_free(a);
 }
 
 static void transfer(vf_app *a, int get)
 {
-    int skipped, i, replace = 0;
-    char rname[300];
+    int i, replace = 0, files = 0, dirs = 0;
+    vf_pane *src;
     if (!a->rem) { vf_set_msg(a, 1, "Not connected: O opens a connection"); return; }
-    collect(a, get ? PANE_REMOTE : PANE_LOCAL, 0, &skipped);
+    collect(a, get ? PANE_REMOTE : PANE_LOCAL, 1, &i);
     a->ops_get = get;
-    if (!a->nops) {
-        vf_set_msg(a, 1, skipped ? "Directories are not copied yet (Phase 3): tag files"
-                                 : "No file here to %s", get ? "get" : "put");
+    if (!a->nops) { vf_set_msg(a, 1, "Nothing here to %s", get ? "get" : "put"); return; }
+    src = &a->pane[a->ops_pane];
+    steps_free(a);
+    a->scan_links = a->scan_deep = 0;
+    a->cancel = 0; a->scan_drawn = 0;
+    for (i = 0; i < a->nops; i++)
+        if (!scan(a, get, src->dir, a->pane[get ? PANE_LOCAL : PANE_REMOTE].dir, &src->e[a->ops[i]],
+                  &a->pane[get ? PANE_LOCAL : PANE_REMOTE], -1, i, "", 0)) {
+            if (a->cancel) vf_set_msg(a, 1, "Cancelled while reading the directories: nothing was copied");
+            steps_free(a);
+            return;
+        }
+    for (i = 0; i < a->nsteps; i++) if (a->steps[i].is_dir) dirs++; else files++;
+    if (!a->nsteps) {
+        vf_set_msg(a, 1, "Nothing copied");
+        note_left_out(a);
         return;
     }
     if (!get) {
         /* would an upload replace a remote file? ask first */
         text_free(a);
-        for (i = 0; i < a->nops; i++) {
-            vf_entry *e = &a->pane[PANE_LOCAL].e[a->ops[i]], *r;
-            vf_remote_name(e->name, rname, sizeof rname);
-            if ((r = vf_pane_find(&a->pane[PANE_REMOTE], rname)) != 0 && !r->is_parent) {
-                if (!replace++) {
-                    text_add(a, "These files are on %s already and would be replaced:", a->host);
-                    text_add(a, "");
-                }
-                text_add(a, "  %-40s (%s)", rname, e->name);
+        for (i = 0; i < a->nsteps; i++) {
+            const vf_step *s = &a->steps[i];
+            const char *ln;
+            if (s->is_dir || !s->exists) continue;
+            if (!replace++) {
+                text_add(a, "These files are on %s already and would be replaced:", a->host);
+                text_add(a, "");
             }
+            ln = strrchr(s->src, ']');
+            text_add(a, "  %-40s (%s)", s->name, ln ? ln + 1 : s->src);
         }
         if (replace) {
             text_add(a, "");
-            text_add(a, "%d file%s to put in all; Y replaces them, any other key puts nothing.",
-                     a->nops, a->nops == 1 ? "" : "s");
+            if (dirs) {
+                text_add(a, "%d file%s in %d director%s to put in all; Y replaces them,", files,
+                         files == 1 ? "" : "s", dirs, dirs == 1 ? "y" : "ies");
+                text_add(a, "any other key puts nothing.");
+            } else
+                text_add(a, "%d file%s to put in all; Y replaces them, any other key puts nothing.",
+                         files, files == 1 ? "" : "s");
             snprintf(a->text_title, sizeof a->text_title, "Put into %s", a->pane[PANE_REMOTE].dir);
             a->mode = M_CONFIRM; a->prompt = P_ASK; a->ask = ASK_REPLACE;
             vf_strlcpy(a->prompt_label, "Replace them? (Y/N) [N]: ", sizeof a->prompt_label);
@@ -705,11 +965,6 @@ static void transfer(vf_app *a, int get)
         }
     }
     run_transfer(a);
-    if (skipped && !a->msg_err) {
-        char m[256];
-        vf_strlcpy(m, a->msg, sizeof m);
-        vf_set_msg(a, 0, "%s; %d director%s left out", m, skipped, skipped == 1 ? "y" : "ies");
-    }
 }
 
 /* ---------- delete, rename, make directory ---------- */
@@ -803,10 +1058,12 @@ static void mkdir_done(vf_app *a, const char *name)
     if (!name[0]) return;
     if (a->act == PANE_LOCAL) {
         vf_lsubdir(p->dir, name, path, sizeof path);
-        st = vfp_mkdir(path);
-        if (!(st & 1)) status_text(st, m, sizeof m);
         snprintf(shown, sizeof shown, "%s.DIR;1", name);
         vf_upper(shown);
+        /* LIB$CREATE_DIR succeeds on a directory that is there: say so instead */
+        if (vf_pane_find(p, shown)) { vf_set_msg(a, 1, "Not made: %s is there already", shown); return; }
+        st = vfp_mkdir(path);
+        if (!(st & 1)) status_text(st, m, sizeof m);
     } else {
         vf_xfile(a->rvms, p->dir, name, path, sizeof path);
         st = vfr_mkdir(a->rem, path);
@@ -1004,8 +1261,9 @@ static void help_build(vf_app *a)
     text_add(a, "CONNECTION");
     text_add(a, "  O                            open (SFTP or FTP); GOLD O closes it");
     text_add(a, "FILES");
-    text_add(a, "  G  Get                       download the tagged (or current) remote files");
-    text_add(a, "  P  Put                       upload the tagged (or current) local files");
+    text_add(a, "  G  Get                       download the tagged (or current) entries");
+    text_add(a, "  P  Put                       upload the tagged (or current) entries");
+    text_add(a, "                               (a directory goes whole, all that is in it)");
     text_add(a, "  C, F5  Copy                  to the other pane (Get or Put)");
     text_add(a, "  D, Remove  Delete            asks first; local: the versions named only");
     text_add(a, "  R  Rename    M  Make directory    V  View    A  Attributes");
@@ -1066,7 +1324,8 @@ static void ask_answer(vf_app *a, int key)
         if (yes) run_delete(a); else vf_set_msg(a, 0, "Not deleted: nothing was changed");
         return;
     case ASK_REPLACE:
-        if (yes) run_transfer(a); else vf_set_msg(a, 0, "Nothing was put");
+        if (yes) run_transfer(a);
+        else { steps_free(a); vf_set_msg(a, 0, "Nothing was put"); }
         return;
     default: return;
     }
@@ -1173,7 +1432,7 @@ static void main_key(vf_app *a, int key)
         if (p->nvis && p->e[p->vis[0]].is_parent) { p->cur = 0; enter(a); }
         return;
     case ' ': case 't': case 'T':
-        if (e && !e->is_parent && !e->is_dir) e->tagged = !e->tagged;
+        if (e && !e->is_parent) e->tagged = !e->tagged;
         if (p->cur < p->nvis - 1) p->cur++;
         return;
     case '*': start_prompt(a, P_TAG, "Tag the files named: ", "*"); return;

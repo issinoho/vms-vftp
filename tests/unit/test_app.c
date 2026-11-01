@@ -379,6 +379,81 @@ static void test_screens(void)
     snap(a, "15_wide");
 }
 
+/* Directories go across whole (D13) */
+static void test_dirs(void)
+{
+    vf_app *a = &app;
+    int len, vers = 0, i, found = 0;
+    const char *d;
+    start(24, 80, "test@test.example");
+    type(a, "secret"); key(a, VK_DO); key(a, 'Y');
+    stub_add_remote_dir("/home/test/data/v1.2");
+    stub_add_remote("/home/test/data/v1.2/deep.txt", "deep\n", 5);
+    stub_add_remote_link("/home/test/data/loop");
+    a->act = PANE_REMOTE; key(a, 'J'); key(a, VK_RETURN);           /* re-read the server */
+
+    /* cancelled while the directories are read: nothing made */
+    go(a, PANE_REMOTE, "data");
+    stub_cancel_after(1);
+    key(a, 'G');
+    CHECK(strstr(a->msg, "Cancelled while reading") != 0);
+    CHECK(!strstr(stub_log(), "MKDIR"));
+
+    /* Get a directory: what is in it, a dotted name escaped, the link not followed */
+    go(a, PANE_REMOTE, "data");
+    key(a, 'G');
+    d = stub_local("STUB$DKA0:[USERS.TEST.DATA]BIG.LOG", &len, 0, 0);
+    CHECK(d && len == 2 && !memcmp(d, "x\n", 2));
+    d = stub_local("STUB$DKA0:[USERS.TEST.DATA.V1^.2]DEEP.TXT", &len, 0, 0);
+    CHECK(d && len == 5);
+    CHECK(strstr(a->msg, "Got 2 files, 2 directories made, 7 bytes") != 0);
+    CHECK(strstr(a->msg, "; 1 link to a directory not followed") != 0);
+    CHECK(strstr(stub_log(), "MKDIR STUB$DKA0:[USERS.TEST.data]\n") != 0);
+    CHECK(vf_pane_find(&a->pane[PANE_LOCAL], "DATA.DIR;1") != 0);
+    /* again: the directories are there, the files new versions (D8) */
+    go(a, PANE_REMOTE, "data");
+    key(a, 'G');
+    CHECK(strstr(a->msg, "Got 2 files, 7 bytes") != 0);
+    CHECK(stub_local("STUB$DKA0:[USERS.TEST.DATA]BIG.LOG", 0, 0, &vers) && vers == 2);
+
+    /* Put a directory */
+    go(a, PANE_LOCAL, "WORK.DIR;1");
+    key(a, 'P');
+    d = stub_remote("/home/test/work/plan.txt", &len);
+    CHECK(d && len == 8 && !memcmp(d, "one\ntwo\n", 8));
+    CHECK(strstr(a->msg, "Put 1 file, 1 directory made") != 0);
+    /* again: a file below would be replaced, so the confirm screen names it */
+    stub_add_local("STUB$DKA0:[USERS.TEST.WORK]", "NEW.TXT", 1, "new\n", 4);
+    go(a, PANE_LOCAL, "WORK.DIR;1");
+    key(a, 'P');
+    CHECK(a->mode == M_CONFIRM && a->ask == ASK_REPLACE);
+    for (i = 0; i < a->ntext; i++) if (strstr(a->text[i], "work/plan.txt") && strstr(a->text[i], "(PLAN.TXT;1)")) found = 1;
+    CHECK(found);
+    snap(a, "19_dir_replace");
+    key(a, 'n');
+    CHECK(!stub_remote("/home/test/work/new.txt", 0));             /* nothing at all was put */
+    go(a, PANE_LOCAL, "WORK.DIR;1");
+    key(a, 'P'); key(a, 'Y');
+    CHECK(stub_remote("/home/test/work/new.txt", 0) != 0);
+    CHECK(!stub_remote_like("/home/test/work/plan.txt."));
+    CHECK(strstr(a->msg, "Put 2 files,") != 0);
+
+    /* a file on the server where the directory would go: nothing is copied */
+    stub_add_remote("/home/test/ssh", "a file", 6);
+    a->act = PANE_REMOTE; key(a, 'J'); key(a, VK_RETURN);
+    go(a, PANE_LOCAL, "SSH.DIR;1");
+    key(a, 'P');
+    CHECK(strstr(a->msg, "ssh is a file on the server") != 0);
+    CHECK(!stub_remote_like("/home/test/ssh/"));
+
+    /* tagging takes directories too (Space), and the tag goes when it is copied */
+    go(a, PANE_REMOTE, "data"); key(a, ' ');
+    go(a, PANE_REMOTE, "kit.zip"); key(a, ' ');
+    key(a, 'G');
+    CHECK(strstr(a->msg, "Got 3 files") != 0);
+    CHECK(!vf_pane_find(&a->pane[PANE_REMOTE], "data")->tagged);
+}
+
 int main(void)
 {
     test_connect();
@@ -386,6 +461,7 @@ int main(void)
     test_cancel();
     test_ftp_login();
     test_manage();
+    test_dirs();
     test_screens();
     vf_app_free(&app);
     printf("test_app: %d checks, %d failed\n", checks, fails);

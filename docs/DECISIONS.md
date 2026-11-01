@@ -108,3 +108,30 @@ AUTH TLS (both nodes, N8) gets plain FTP, and the password question of D10.
 Considered: CA checking (VMS systems rarely have a CA bundle set up, and test and
 internal servers use self-signed certificates); requiring TLS (no FTP to the
 nodes at all); implicit FTPS on port 990 (rare, and not in RFC 4217).
+
+## D13. Whole directories: the tree read first, then copied (2026-11-01, proposed)
+
+Get and Put take tagged (or current) directories as well as files; Space tags a
+directory, `T` and `*` still tag files only. Before anything is copied VFTP reads
+the whole tree on the source side and, where a directory is there already, the
+matching one on the destination side, and makes a list of steps (directories to
+make, files to copy). So the replace screen of a Put names every file that would
+be replaced at any depth (`work/plan.txt`), Y or N covers the lot, and N copies
+nothing. The steps then run in order. A directory that cannot be made skips what
+would go in it; a directory that cannot be read, or a file on the server where a
+directory would go, stops the transfer before anything is copied.
+- Links to directories are not followed (they may lead back up); the message says
+  how many were left out. At most 32 levels below the tagged directory, and 100000
+  steps in one transfer.
+- A download is still always a new version (D8): a local directory that is there
+  already is used, its files get new versions. Directory names from a server
+  become local directory names with every dot escaped (`v1.2` is `[.v1^.2]` on
+  ODS-5, `[.V1_2]` on ODS-2), since a dot would start a subdirectory.
+- A VMS server lists every version and its directories as `SUB.DIR;1`, by FTP
+  and by SFTP (N2, N8): a directory Get takes the highest version of each file
+  and names the directory `SUB`.
+- On a VMS server a Put makes new versions (N5), so nothing is listed as replaced.
+Considered: copying while reading (no full list to confirm, and the replace
+question would come file by file, mid-transfer); following links (loops, and the
+same files twice); asking before every directory (noise: copying a directory into
+one that does not hold it changes nothing that is there).

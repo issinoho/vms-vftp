@@ -42,6 +42,14 @@ void vf_ldirname(const char *entry, char *out, size_t size);
    becomes "_", extra dots too, name and type cut to 39. A ";n" version from a
    VMS server is dropped. Returns 1 if the name had to change (beyond case). */
 int  vf_local_name(const char *remote, int ods5, char *out, size_t size);
+/* A name's ";n" version: "R.TXT;3" -> 3 and base "R.TXT"; -1 (base = name) if none. */
+int  vf_version(const char *name, char *base, size_t size);
+/* A directory entry's own name: "SUB.DIR;1" (a VMS server lists them so, by FTP or
+   by SFTP, N2) -> "SUB"; any other name as it is. */
+void vf_dirbase(const char *entry, char *out, size_t size);
+/* A remote directory's name as the last element of a local directory spec
+   ("DEV:[A.name]"): as vf_local_name, but no dot is left (ODS-5 "^.", ODS-2 "_"). */
+int  vf_local_dirname(const char *remote, int ods5, char *out, size_t size);
 /* A local file name as a remote one: the version and an empty type's dot go,
    "^" escapes are undone, and a name with no lower-case letters is lower-cased
    (as VMS FTP clients do). */

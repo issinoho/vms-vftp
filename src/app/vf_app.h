@@ -23,6 +23,22 @@ enum { FF_PROTO, FF_HOST, FF_PORT, FF_USER, FF_PASSWORD, FF_KEY, FF_PHRASE, FF_D
 
 #define VF_FIELD 256
 #define VF_MAXOPS 4096
+#define VF_MAXSTEPS 100000   /* files and directories in one transfer */
+#define VF_MAXDEPTH 32       /* directory levels below the one tagged */
+
+/* One step of a transfer (D13): a directory to make, or a file to copy. The
+   steps are found before anything is copied, so the confirm screen can name every
+   file that would be replaced, at any depth. */
+typedef struct {
+    int is_dir;
+    int exists;              /* directory: there already; file: replaces one */
+    int parent;              /* the step that makes its directory; -1: the pane's own */
+    int top;                 /* the entry of ops it comes from */
+    int done, failed;
+    unsigned long long size;
+    char *name;              /* the path below the pane, remote names: "data/big.log" */
+    char *src, *dst;         /* full paths; a directory's dst is what mkdir takes */
+} vf_step;
 
 typedef struct {
     vfp_session sess;
@@ -69,11 +85,14 @@ typedef struct {
 
     /* the files an operation works on (indexes into a pane's entries) */
     int ops[VF_MAXOPS], nops, ops_pane, ops_get;
+    vf_step *steps; int nsteps, capsteps;
+    int scan_links, scan_deep;   /* directories the scan left out: links, too deep */
+    double scan_drawn;
 
     /* a transfer in progress (the strip shows it) */
-    int xfer_on, xfer_get, xfer_i, xfer_n, xfer_text;
+    int xfer_on, xfer_get, xfer_i, xfer_n, xfer_text, xfer_dirs;
     char xfer_name[256];
-    unsigned long long xfer_done, xfer_total, batch_done;
+    unsigned long long xfer_done, xfer_total, batch_done, batch_total;
     double xfer_t0, xfer_drawn;
     int cancel;
     vf_lines lines;

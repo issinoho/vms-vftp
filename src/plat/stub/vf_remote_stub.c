@@ -13,7 +13,7 @@
 
 #define MAXR 64
 
-typedef struct { char path[256]; int is_dir; char *data; int len; unsigned int perms; int used; } rnode;
+typedef struct { char path[256]; int is_dir, is_link; char *data; int len; unsigned int perms; int used; } rnode;
 
 static rnode srv[MAXR];
 static int trusted, changed, ftps, ftps_trusted;
@@ -46,6 +46,8 @@ static rnode *radd(const char *path, int is_dir, const char *data, int len)
 }
 
 void stub_add_remote(const char *path, const char *data, int len) { radd(path, 0, data, len); }
+void stub_add_remote_dir(const char *path) { radd(path, 1, 0, 0); }
+void stub_add_remote_link(const char *path) { rnode *n = radd(path, 1, 0, 0); if (n) n->is_link = 1; }
 void stub_trust(int on) { trusted = on; }
 void stub_ftps(int on) { ftps = on; ftps_trusted = 0; }
 void stub_change_key(int on) { changed = on; }
@@ -177,6 +179,7 @@ static void fill(const rnode *n, vf_entry *e)
     memset(e, 0, sizeof *e);
     vf_strlcpy(e->name, vf_rbase(n->path), sizeof e->name);
     e->is_dir = n->is_dir;
+    e->is_link = n->is_link;
     e->size = (unsigned long long) n->len;
     e->has_size = e->has_time = 1;
     e->perms = n->perms;
