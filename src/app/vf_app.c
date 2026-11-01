@@ -1086,6 +1086,75 @@ static void mkdir_done(vf_app *a, const char *name)
     vf_set_msg(a, 0, "Made %s", path);
 }
 
+/* ---------- permissions on the server (GOLD A) ---------- */
+
+static void start_prompt(vf_app *a, int kind, const char *label, const char *initial);
+
+static void chmod_start(vf_app *a)
+{
+    int skipped;
+    char label[300], init[16];
+    const vf_entry *e;
+    if (a->act != PANE_REMOTE) {
+        vf_set_msg(a, 1, "GOLD A changes a server's permissions; here, SET SECURITY/PROTECTION does");
+        return;
+    }
+    if (!a->rem) return;
+    if (a->rvms) { vf_set_msg(a, 1, "A VMS FTP server keeps VMS protection: not changed from here"); return; }
+    collect(a, PANE_REMOTE, 1, &skipped);
+    if (!a->nops) { vf_set_msg(a, 1, "Nothing here to change"); return; }
+    e = &a->pane[PANE_REMOTE].e[a->ops[0]];
+    init[0] = '\0';
+    if (a->nops == 1) {
+        if (e->perms) snprintf(init, sizeof init, (e->perms & 07000) ? "%04o" : "%03o", e->perms & 07777);
+        snprintf(label, sizeof label, "Permissions of %.200s (644, rw-r--r--, go-w): ", e->name);
+    } else
+        snprintf(label, sizeof label, "Permissions of the %d tagged (644, rw-r--r--, go-w): ", a->nops);
+    start_prompt(a, P_CHMOD, label, init);
+}
+
+static void chmod_done(vf_app *a, const char *spec)
+{
+    static unsigned int modes[VF_MAXOPS];
+    vf_pane *p = &a->pane[PANE_REMOTE];
+    char why[200], path[VF_SPEC_MAX], first[400], b[16], last[256];
+    int i, ok = 0, failed = 0;
+    unsigned int st, lastm = 0;
+    if (!spec[0]) return;
+    /* every one worked out first: a mistake in what was typed changes nothing */
+    for (i = 0; i < a->nops; i++) {
+        const vf_entry *e = &p->e[a->ops[i]];
+        if (!vf_perms_apply(spec, e->perms & 07777, e->is_dir, e->perms != 0, &modes[i], why, sizeof why)) {
+            vf_set_msg(a, 1, "Nothing changed: %s%s%s", a->nops > 1 ? e->name : "", a->nops > 1 ? ": " : "", why);
+            return;
+        }
+    }
+    first[0] = last[0] = '\0';
+    for (i = 0; i < a->nops; i++) {
+        const vf_entry *e = &p->e[a->ops[i]];
+        vf_xfile(a->rvms, p->dir, e->name, path, sizeof path);
+        st = vfr_chmod(a->rem, path, modes[i]);
+        if (st & 1) {
+            ok++;
+            logf_("CHMOD %s %04o", path, modes[i]);
+            vf_strlcpy(last, e->name, sizeof last);
+            lastm = modes[i];
+        } else {
+            failed++;
+            logf_("CHMOD %s %04o FAILED: %s", path, modes[i], vfr_error(a->rem));
+            if (!first[0]) snprintf(first, sizeof first, "%s: %s", e->name, vfr_error(a->rem));
+        }
+    }
+    read_remote(a);
+    if (failed) vf_set_msg(a, 1, "%d changed, %d not: %s", ok, failed, first);
+    else if (ok == 1) {
+        const vf_entry *e = vf_pane_find(p, last);
+        vf_set_msg(a, 0, "%s: now %s (%04o)", last,
+                   vf_fmt_perms(e && e->perms ? e->perms : lastm, e && e->is_dir, 0, b, sizeof b),
+                   e && e->perms ? e->perms & 07777 : lastm);
+    } else vf_set_msg(a, 0, "Permissions changed on %d entries", ok);
+}
+
 /* ---------- moving around ---------- */
 
 static void enter(vf_app *a)
@@ -1247,6 +1316,7 @@ static void info(vf_app *a)
         text_add(a, "Type        %s", e->is_link ? "symbolic link" : e->is_dir ? "directory" : "file");
         text_add(a, "Permissions %s (%04o)", vf_fmt_perms(e->perms, e->is_dir, e->is_link, b, sizeof b), e->perms & 07777);
         text_add(a, "Owner       %s", e->owner);
+        text_add(a, "            (GOLD A on the pane changes the permissions)");
         text_add(a, "Get as      %s", e->is_dir ? "-" : want_text(a, e->name) ? "text (variable-length records)"
                                                     : e->size % 512 == 0 ? "binary, fixed 512-byte records"
                                                                          : "binary, undefined records");
@@ -1277,6 +1347,7 @@ static void help_build(vf_app *a)
     text_add(a, "  C, F5  Copy                  to the other pane (Get or Put)");
     text_add(a, "  D, Remove  Delete            asks first; local: the versions named only");
     text_add(a, "  R  Rename    M  Make directory    V  View    A  Attributes");
+    text_add(a, "  GOLD A                       a server's permissions: 644, rw-r--r--, go-w");
     text_add(a, "  T, Space  Tag/untag          GOLD T all, GOLD U none, * by name (wildcard)");
     text_add(a, "  X  Transfer mode             AUTO, ASCII, BINARY");
     text_add(a, "  S  Sort   F, Find  Filter    GOLD V every version / highest only (local)");
@@ -1298,8 +1369,6 @@ static void help_build(vf_app *a)
 }
 
 /* ---------- the sites file (D9, D14) ---------- */
-
-static void start_prompt(vf_app *a, int kind, const char *label, const char *initial);
 
 /* VFTP$SITES, or SYS$LOGIN:VFTP.SITES */
 static void sites_spec(vf_app *a)
@@ -1585,6 +1654,7 @@ static void prompt_key(vf_app *a, int key)
     case P_MKDIR: mkdir_done(a, text); return;
     case P_JUMP: jump(a, text); return;
     case P_SITE: site_add_done(a, text); return;
+    case P_CHMOD: chmod_done(a, text); return;
     default: return;
     }
 }
@@ -1633,6 +1703,7 @@ static void main_key(vf_app *a, int key)
             vf_set_msg(a, 0, a->all_versions ? "Local pane: every version" : "Local pane: highest versions only");
             return;
         case 'w': case 'W': read_local(a); read_remote(a); vf_set_msg(a, 0, "Read again"); return;
+        case 'a': case 'A': chmod_start(a); return;
         default: return;
         }
     }

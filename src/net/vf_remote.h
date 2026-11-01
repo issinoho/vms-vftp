@@ -58,6 +58,9 @@ unsigned int vfr_rmdir(vf_remote *r, const char *path);
 unsigned int vfr_unlink(vf_remote *r, const char *path);
 unsigned int vfr_rename(vf_remote *r, const char *from, const char *to);   /* never replaces */
 unsigned int vfr_replace(vf_remote *r, const char *from, const char *to);  /* from takes to's place */
+/* A file's or directory's permissions, Unix mode bits (07777): SFTP setstat, FTP
+   SITE CHMOD (Unix servers; a VMS FTP server keeps VMS protection, N8). */
+unsigned int vfr_chmod(vf_remote *r, const char *path, unsigned int mode);
 
 /* text: FTP moves the file in TYPE A, lines ending CRLF on the wire, given here as
    LF lines (N8); otherwise bytes. SFTP always moves bytes. */

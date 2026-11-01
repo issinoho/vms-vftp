@@ -5,9 +5,9 @@
 │ Type        file                                                             │
 │ Permissions -rw-r--r-- (0644)                                                │
 │ Owner       test                                                             │
+│             (GOLD A on the pane changes the permissions)                     │
 │ Get as      binary, undefined records                                        │
 │ Modified    24-OCT-2026 18:02                                                │
-│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │

@@ -102,6 +102,8 @@ ok "r.txt downloaded as text lines (TYPE A)" 'grep -aqx "A text file on the Unix
 ok "U.TXT put as LF lines, then renamed moved.txt" \
    '[ "$(cat "$r/moved.txt" 2>/dev/null)" = "$(printf "Written on VMS, put to another server.\nIts second line.")" ]'
 ok "the replace: u.txt.vftp-part renamed over u.txt" 'grep -q "<- RNFR u.txt.vftp-part" "$d/ftpd.log" && grep -q "<- RNTO u.txt" "$d/ftpd.log"'
+ok "GOLD A go-r: moved.txt has no group or world read (SITE CHMOD)" \
+   'm=$(stat -c %a "$r/moved.txt") && [ $(( 0$m & 044 )) = 0 ] && [ $(( 0$m & 0400 )) != 0 ] && grep -q "<- SITE CHMOD [0-7]* moved.txt" "$d/ftpd.log"'
 ok "SUBDIR made, r.txt deleted" '[ -d "$r/SUBDIR" ] && [ ! -e "$r/r.txt" ]'
 ok "the password is in no output" '! grep -aqF -- "$pass" "$out" "$d/ftpd.log" "$top/out/plat-$node.txt"'
 sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"

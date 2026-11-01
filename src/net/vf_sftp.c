@@ -395,6 +395,16 @@ static unsigned int sftp_replace(vf_remote *rr, const char *from, const char *to
            ? 1 : fail(r, from);
 }
 
+static unsigned int sftp_chmod(vf_remote *rr, const char *path, unsigned int mode)
+{
+    sftp_remote *r = (sftp_remote *) rr;
+    LIBSSH2_SFTP_ATTRIBUTES at;
+    memset(&at, 0, sizeof at);
+    at.flags = LIBSSH2_SFTP_ATTR_PERMISSIONS;          /* only these: the rest stays */
+    at.permissions = mode & 07777;
+    return libssh2_sftp_setstat(r->sftp, path, &at) == 0 ? 1 : fail(r, path);
+}
+
 static unsigned int sftp_open_read(vf_remote *rr, const char *path, int text, vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
@@ -477,7 +487,7 @@ static void sftp_disconnect(vf_remote *rr)
 
 static const vfr_ops ops = {
     sftp_trust, sftp_methods, sftp_login_password, sftp_login_key, sftp_realpath,
-    sftp_list, sftp_stat, sftp_mkdir, sftp_rmdir, sftp_unlink, sftp_rename, sftp_replace,
+    sftp_list, sftp_stat, sftp_mkdir, sftp_rmdir, sftp_unlink, sftp_rename, sftp_replace, sftp_chmod,
     sftp_open_read, sftp_read, sftp_open_write, sftp_write, sftp_close,
     sftp_keepalive, sftp_disconnect
 };

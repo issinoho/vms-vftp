@@ -532,6 +532,40 @@ static void test_sites(void)
     CHECKS(a->pane[PANE_REMOTE].dir, "/home/test/data");
 }
 
+/* GOLD A: a server's permissions */
+static void test_chmod(void)
+{
+    vf_app *a = &app;
+    start(24, 80, "test@test.example");
+    type(a, "secret"); key(a, VK_DO); key(a, 'Y');
+    go(a, PANE_REMOTE, "notes.txt");
+    key(a, VK_PF1); key(a, 'A');
+    CHECK(a->prompt == P_CHMOD && !strcmp(a->pedit.buf, "644"));
+    snap(a, "23_chmod_prompt");
+    erase(a); type(a, "600"); key(a, VK_RETURN);
+    CHECK(vf_pane_find(&a->pane[PANE_REMOTE], "notes.txt")->perms == 0600);
+    CHECKS(a->msg, "notes.txt: now -rw------- (0600)");
+    CHECK(strstr(stub_log(), "CHMOD /home/test/notes.txt 0600") != 0);
+    /* tagged, a change from each one's own */
+    go(a, PANE_REMOTE, "notes.txt"); key(a, ' ');
+    go(a, PANE_REMOTE, "kit.zip"); key(a, ' ');
+    key(a, VK_PF1); key(a, 'A');
+    CHECK(a->prompt == P_CHMOD && !a->pedit.buf[0]);
+    type(a, "a+x"); key(a, VK_RETURN);
+    CHECK(vf_pane_find(&a->pane[PANE_REMOTE], "notes.txt")->perms == 0711);
+    CHECK(vf_pane_find(&a->pane[PANE_REMOTE], "kit.zip")->perms == 0755);
+    CHECKS(a->msg, "Permissions changed on 2 entries");
+    /* a mistake changes nothing */
+    go(a, PANE_REMOTE, "kit.zip");
+    key(a, VK_PF1); key(a, 'A'); erase(a); type(a, "rwz"); key(a, VK_RETURN);
+    CHECK(strstr(a->msg, "Nothing changed") != 0);
+    CHECK(vf_pane_find(&a->pane[PANE_REMOTE], "kit.zip")->perms == 0755);
+    /* not on the local pane */
+    a->act = PANE_LOCAL;
+    key(a, VK_PF1); key(a, 'A');
+    CHECK(a->prompt == P_NONE && strstr(a->msg, "SET SECURITY") != 0);
+}
+
 int main(void)
 {
     test_connect();
@@ -541,6 +575,7 @@ int main(void)
     test_manage();
     test_dirs();
     test_sites();
+    test_chmod();
     test_screens();
     vf_app_free(&app);
     printf("test_app: %d checks, %d failed\n", checks, fails);

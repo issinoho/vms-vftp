@@ -30,6 +30,9 @@
 3 local back | \x05\x15[.BACK]\r
 2 to remote last | \x09
 8 get dirs | g
+2 remote last file | \eOP\e[B
+2 chmod | \eOPa
+4 chmod mode | \x05\x15640\r
 2 sites | l
 2 site add | a
 2 site name | \x05\x15livesite\r

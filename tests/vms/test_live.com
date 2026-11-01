@@ -173,6 +173,9 @@ $ write sys$output "LIVE-DIRS back one version ''yes'"
 $ yes = "no"
 $ if f$search(bk + "empty.dir") .nes. "" then yes = "yes"
 $ write sys$output "LIVE-DIRS back empty ''yes'"
+$! GOLD A on the server's R.TXT: 640 by SFTP; refused by FTP (VMS protection)
+$ pro = f$file_attributes(srv + "r.txt", "PRO")
+$ write sys$output "LIVE-PROT r.txt ''pro'"
 $! the site saved at the end (D14): SYS$LOGIN is [.LIVE] while VFTP runs
 $ write sys$output "==== the sites file"
 $ yes = "no"

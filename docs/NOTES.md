@@ -295,3 +295,17 @@ On x86 and IA64, by SFTP (key) and FTP (VFTPTEST, password typed again):
   second into the saved remote directory.
 - Seen there: an FTP site was saved with the form's default key file, which FTP
   never uses; it is now left out of an FTP site (Linux tests only since).
+
+## N16. Changing permissions (GOLD A) on the nodes (2026-11-01, tools/live_dirs.sh)
+
+In the directory test, after the Get, GOLD A on the server's R.TXT;1 (x86 and IA64 alike):
+- By SFTP, `640`: VSI's server takes setstat (permissions only) and R.TXT;1 is then
+  `(S:RWD,O:RWD,G:R,W:)` on the server: owner rw is RWD, the system gets what the
+  owner has, group r is R, world nothing. The pane, read again, lists it as
+  -rw-r----- (0640), as the message says. Logged `CHMOD .../R.TXT;1 0640`.
+- By FTP to the VMS server: refused before anything is sent ("A VMS FTP server
+  keeps VMS protection"); a VMS server's listing has VMS protection, not modes (N8).
+  Whether TCP/IP Services takes SITE CHMOD was not tried (N8 saw SITE VMS and
+  SITE UNIX); VMS protection from here would be its own piece of work.
+The Unix servers (setstat to OpenSSH, SITE CHMOD to pyftpdlib) are in
+live_unix.sh and live_unix_ftp.sh (GOLD A `go-r` on moved.txt, checked with stat).

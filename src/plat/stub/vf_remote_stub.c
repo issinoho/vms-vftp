@@ -263,6 +263,14 @@ unsigned int vfr_replace(vf_remote *r, const char *from, const char *to)
     return 1;
 }
 
+unsigned int vfr_chmod(vf_remote *r, const char *path, unsigned int mode)
+{
+    rnode *n = rfind(path);
+    if (!n) { vf_strlcpy(r->err, "No such file", sizeof r->err); return VFR_FAIL; }
+    n->perms = mode & 07777;
+    return 1;
+}
+
 unsigned int vfr_open_read(vf_remote *r, const char *path, int text, vfr_file **f)
 {
     rnode *n = rfind(path);

@@ -36,6 +36,8 @@
 3 local back | \x05\x15[.BACK]\r
 2 to remote last | \x09
 8 get dirs | g
+2 remote last file | \eOP\e[B
+3 chmod refused | \eOPa
 2 sites | l
 2 site add | a
 2 site name | \x05\x15livesite\r

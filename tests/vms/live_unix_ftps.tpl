@@ -55,6 +55,8 @@
 2 remote last | \eOP\e[B
 3 remote rename | r
 5 rename name | \x05\x15moved.txt\r
+2 chmod | \eOPa
+4 chmod mode | \x05\x15go-r\r
 2 remote last again | \eOP\e[B
 3 remote delete | d
 5 yes remote delete | y

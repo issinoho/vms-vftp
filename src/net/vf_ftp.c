@@ -653,6 +653,15 @@ static unsigned int ftp_rename(vf_remote *rr, const char *from, const char *to)
     return renam(r, from, to);
 }
 
+static unsigned int ftp_chmod(vf_remote *rr, const char *path, unsigned int mode)
+{
+    ftp_remote *r = (ftp_remote *) rr;
+    char dir[VF_SPEC_MAX], name[256];
+    split(r, path, dir, sizeof dir, name, sizeof name);
+    if (!(go(r, dir) & 1)) return VFR_FAIL;
+    return cmd(r, "SITE CHMOD %o %s", mode & 07777, name) / 100 == 2 ? 1 : fail_rep(r, name);
+}
+
 static unsigned int ftp_replace(vf_remote *rr, const char *from, const char *to)
 {
     ftp_remote *r = (ftp_remote *) rr;
@@ -774,7 +783,7 @@ static void ftp_disconnect(vf_remote *rr)
 
 static const vfr_ops ops = {
     ftp_trust, ftp_methods, ftp_login_password, ftp_login_key, ftp_realpath,
-    ftp_list, ftp_stat, ftp_mkdir, ftp_rmdir, ftp_unlink, ftp_rename, ftp_replace,
+    ftp_list, ftp_stat, ftp_mkdir, ftp_rmdir, ftp_unlink, ftp_rename, ftp_replace, ftp_chmod,
     ftp_open_read, ftp_read, ftp_open_write, ftp_write, ftp_close,
     ftp_keepalive, ftp_disconnect
 };

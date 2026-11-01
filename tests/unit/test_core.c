@@ -303,6 +303,32 @@ static void test_sites(void)
     vf_sites_free(&t);
 }
 
+static void test_perms(void)
+{
+    unsigned int m = 0;
+    char why[160];
+#define PERMS(spec, mode, dir, known, want) \
+    do { m = 0xFFFF; CHECK(vf_perms_apply(spec, mode, dir, known, &m, why, sizeof why) && m == (want)); } while (0)
+    PERMS("644", 0, 0, 0, 0644u);
+    PERMS(" 2775 ", 0, 1, 0, 02775u);
+    PERMS("rw-r--r--", 0, 0, 0, 0644u);
+    PERMS("rwsr-x--T", 0, 0, 0, 05750u);
+    PERMS("go-w", 0666, 0, 1, 0644u);
+    PERMS("u+x,g=r", 0600, 0, 1, 0740u);
+    PERMS("+x", 0644, 0, 1, 0755u);
+    PERMS("a+X", 0644, 0, 1, 0644u);                    /* a file with no x: none */
+    PERMS("a+X", 0644, 1, 1, 0755u);                    /* a directory: x */
+    PERMS("o=", 0757, 0, 1, 0750u);
+    PERMS("u-w+x", 0644, 0, 1, 0544u);
+    CHECK(!vf_perms_apply("go-w", 0, 0, 0, &m, why, sizeof why) && strstr(why, "not known"));
+    CHECK(!vf_perms_apply("888", 0644, 0, 1, &m, why, sizeof why));
+    CHECK(!vf_perms_apply("rw-r--r-x-", 0644, 0, 1, &m, why, sizeof why));
+    CHECK(!vf_perms_apply("rw-rw-rwz", 0644, 0, 1, &m, why, sizeof why));
+    CHECK(!vf_perms_apply("g+q", 0644, 0, 1, &m, why, sizeof why));
+    CHECK(!vf_perms_apply("", 0644, 0, 1, &m, why, sizeof why));
+#undef PERMS
+}
+
 int main(void)
 {
     test_util();
@@ -312,6 +338,7 @@ int main(void)
     test_edit();
     test_screen();
     test_sites();
+    test_perms();
     printf("test_core: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

@@ -261,3 +261,78 @@ void vf_pane_row(const vf_pane *p, const vf_entry *e, int width, int year, char 
     snprintf(buf, size, "%-*s %6s %-*s%s", nw, name, sz, wide ? 17 : 6, date, extra);
     if ((int) strlen(buf) > width) buf[width] = '\0';
 }
+
+int vf_perms_apply(const char *spec, unsigned int mode, int is_dir, int known, unsigned int *out,
+                   char *why, size_t wsz)
+{
+    static const char full[] = "rwxrwxrwx";
+    char b[128];
+    const char *p;
+    size_t n, i;
+    vf_strlcpy(b, spec, sizeof b);
+    vf_trim(b);
+    n = strlen(b);
+    if (!n) { snprintf(why, wsz, "no permissions given"); return 0; }
+    if (n <= 4 && strspn(b, "01234567") == n) { *out = (unsigned int) strtoul(b, 0, 8) & 07777; return 1; }
+    if (n == 9 && strspn(b, "rwxsStT-") == 9) {
+        unsigned int m = 0;
+        for (i = 0; i < 9; i++) {
+            char c = b[i], x = (char) (i % 3 == 2);
+            unsigned int bit = 0400u >> i;
+            if (c == '-') continue;
+            if (c == full[i]) { m |= bit; continue; }
+            if (x && (c == 's' || c == 'S') && i < 6) { m |= i == 2 ? 04000u : 02000u; if (c == 's') m |= bit; continue; }
+            if (x && (c == 't' || c == 'T') && i == 8) { m |= 01000u; if (c == 't') m |= bit; continue; }
+            snprintf(why, wsz, "\"%s\": each place is %c or -", b, full[i]);
+            return 0;
+        }
+        *out = m;
+        return 1;
+    }
+    /* symbolic: [ugoa]*[+-=][rwxXst]* ..., clauses split by "," */
+    if (!known) {
+        snprintf(why, wsz, "the permissions here are not known: give them in full (644, rw-r--r--)");
+        return 0;
+    }
+    mode &= 07777;
+    p = b;
+    for (;;) {
+        unsigned int who = 0;
+        while (*p && strchr("ugoa", *p)) {
+            who |= *p == 'u' ? 04700u : *p == 'g' ? 02070u : *p == 'o' ? 01007u : 07777u;
+            p++;
+        }
+        if (!who) who = 07777u;
+        if (!*p || !strchr("+-=", *p)) {
+            snprintf(why, wsz, "\"%s\" is not 644, rw-r--r--, or a change as go-w or u+x", b);
+            return 0;
+        }
+        while (*p && strchr("+-=", *p)) {
+            char op = *p++;
+            unsigned int bits = 0;
+            while (*p && strchr("rwxXst", *p)) {
+                switch (*p) {
+                case 'r': bits |= 0444u; break;
+                case 'w': bits |= 0222u; break;
+                case 'x': bits |= 0111u; break;
+                case 'X': if (is_dir || (mode & 0111u)) bits |= 0111u; break;
+                case 's': bits |= 06000u; break;
+                case 't': bits |= 01000u; break;
+                }
+                p++;
+            }
+            bits &= who;
+            if (op == '+') mode |= bits;
+            else if (op == '-') mode &= ~bits;
+            else mode = (mode & ~(who & 0777u)) | bits;     /* "=" leaves setuid and the like */
+        }
+        if (!*p) break;
+        if (*p != ',') {
+            snprintf(why, wsz, "\"%s\" is not 644, rw-r--r--, or a change as go-w or u+x", b);
+            return 0;
+        }
+        p++;
+    }
+    *out = mode & 07777;
+    return 1;
+}

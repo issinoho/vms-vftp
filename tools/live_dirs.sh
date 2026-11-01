@@ -78,6 +78,12 @@ ok "Get: A.TXT and C.TXT back as the same records" 'same "back a.txt" && same "b
 ok "Get: B.BIN back byte for byte" 'same "back b.bin"'
 ok "Get: one version of each file from the server's two" 'grep -aq "^LIVE-DIRS back one version yes" "$out"'
 ok "Get: the empty directory made" 'grep -aq "^LIVE-DIRS back empty yes" "$out"'
+if [ -n "$ftp" ]; then
+    ok "GOLD A: refused on a VMS FTP server (VMS protection)" 'grep -aq "A VMS FTP server keeps VMS protection" "$out"'
+else
+    ok "GOLD A 640 by setstat: R.TXT (S:RWD,O:RWD,G:R,W:) on the server" \
+       'grep -aq "^LIVE-PROT r.txt SYSTEM=RWD, OWNER=RWD, GROUP=R, WORLD\$" "$out"'
+fi
 ok "Sites: the connection saved as livesite, no password line" \
    'grep -aq "^LIVE-SITES saved yes" "$out" && ! grep -aiq "^password" "$out"'
 if [ -n "$ftp" ]; then login='LOGIN vftptest@localhost:21 by password$'; else login="LOGIN [^ ]*@localhost:$PORT by key\$"; fi

@@ -31,6 +31,7 @@ unsigned int vfr_rmdir(vf_remote *r, const char *path) { return r->ops->rmdir(r,
 unsigned int vfr_unlink(vf_remote *r, const char *path) { return r->ops->unlink(r, path); }
 unsigned int vfr_rename(vf_remote *r, const char *from, const char *to) { return r->ops->rename(r, from, to); }
 unsigned int vfr_replace(vf_remote *r, const char *from, const char *to) { return r->ops->replace(r, from, to); }
+unsigned int vfr_chmod(vf_remote *r, const char *path, unsigned int mode) { return r->ops->chmod(r, path, mode); }
 unsigned int vfr_open_read(vf_remote *r, const char *path, int text, vfr_file **f)
 { return r->ops->open_read(r, path, text, f); }
 unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got) { return f->r->ops->read(f, buf, size, got); }

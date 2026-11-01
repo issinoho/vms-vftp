@@ -28,7 +28,7 @@ class Handler(TLS_FTPHandler if cert else FTPHandler):
 
 
 auth = DummyAuthorizer()
-auth.add_user("vftptest", password, root, perm="elradfmw")
+auth.add_user("vftptest", password, root, perm="elradfmwM")   # M: SITE CHMOD (GOLD A)
 del password
 Handler.authorizer = auth
 Handler.passive_ports = range(60100, 60200)

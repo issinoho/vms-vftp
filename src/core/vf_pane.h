@@ -64,6 +64,12 @@ void vf_pane_row(const vf_pane *p, const vf_entry *e, int width, int year, char 
 char *vf_fmt_bytes(unsigned long long n, char *buf, size_t size);
 /* "drwxr-x---" from Unix mode bits. */
 char *vf_fmt_perms(unsigned int mode, int is_dir, int is_link, char *buf, size_t size);
+/* New permissions from what the user typed: octal ("644", "2775"), in full
+   ("rw-r--r--"), or as chmod's symbolic changes ("go-w", "u+x,g=r", "a+X"),
+   which work from mode (known: mode is what the server listed; if not, only the
+   first two forms). 1 and *out; 0 and why. */
+int vf_perms_apply(const char *spec, unsigned int mode, int is_dir, int known, unsigned int *out,
+                   char *why, size_t wsz);
 /* Compare two times: <0, 0, >0. */
 int  vf_when_cmp(const vf_when *a, const vf_when *b);
 

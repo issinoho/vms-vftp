@@ -16,9 +16,9 @@
 │   C, F5  Copy                  to the other pane (Get or Put)                │
 │   D, Remove  Delete            asks first; local: the versions named only    │
 │   R  Rename    M  Make directory    V  View    A  Attributes                 │
+│   GOLD A                       a server's permissions: 644, rw-r--r--, go-w  │
 │   T, Space  Tag/untag          GOLD T all, GOLD U none, * by name (wildcard) │
 │   X  Transfer mode             AUTO, ASCII, BINARY                           │
-│   S  Sort   F, Find  Filter    GOLD V every version / highest only (local)   │
 └───────────────────────────────────────────────────────────────────── more ───┘
  HELP  Up/Down Prev/Next scroll
  COMMANDS  Any other key returns

@@ -18,6 +18,7 @@ typedef struct {
     unsigned int (*unlink)(vf_remote *r, const char *path);
     unsigned int (*rename)(vf_remote *r, const char *from, const char *to);
     unsigned int (*replace)(vf_remote *r, const char *from, const char *to);
+    unsigned int (*chmod)(vf_remote *r, const char *path, unsigned int mode);
     unsigned int (*open_read)(vf_remote *r, const char *path, int text, vfr_file **f);
     unsigned int (*read)(vfr_file *f, char *buf, int size, int *got);
     unsigned int (*open_write)(vf_remote *r, const char *path, int text, vfr_file **f);

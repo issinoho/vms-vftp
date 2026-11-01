@@ -47,6 +47,8 @@ journalctl -t internal-sftp --since "$since" --no-pager -o cat 2>/dev/null |
 echo "==== the server's writes (journal)"; cat "$top/out/unix/sftp-ops-$node.txt"
 ok "the replace went by posix-rename" 'grep -q "posix-rename old \"u.txt.vftp-part\" new \"u.txt\"" "$top/out/unix/sftp-ops-$node.txt"'
 ok "big.bin itself never opened to write" '! grep -q "open \"big.bin\" flags WRITE" "$top/out/unix/sftp-ops-$node.txt"'
+ok "GOLD A go-r: moved.txt has no group or world read (setstat)" \
+   'm=$(stat -c %a "$RDIR/moved.txt") && [ $(( 0$m & 044 )) = 0 ] && [ $(( 0$m & 0400 )) != 0 ]'
 ok "SUBDIR made, r.txt deleted" '[ -d "$RDIR/SUBDIR" ] && [ ! -e "$RDIR/r.txt" ]'
 
 sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"
