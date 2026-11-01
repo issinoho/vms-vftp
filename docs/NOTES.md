@@ -337,4 +337,14 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
   logs in by FTP; in upper case it fails the same way. sshd_config has no Allow/Deny
   lines and nothing about passwords; the UAF gives VFTPTEST Network and Remote
   access, no Local, Batch or Dialup, Pwdminimum 15 against a 7-character password,
-  and no intrusion record names it. Not explained yet: needs the system manager.
+  and no intrusion record names it.
+- The reason, from `ssh vftptest@localhost` on IA64 (run by the user): the password
+  is taken, then "Received disconnect ... You are not authorized to login from this
+  source". VSI's sshd does not log in from localhost under Network or Remote. The
+  user gave VFTPTEST /LOCAL on both nodes; then live_dirs.sh's password login
+  passed on both (all 13 checks, "LOGIN vftptest@localhost:<port> by password").
+- libssh2 drops a server's disconnect text unless a callback asks for it, so VFTP
+  said only "Waiting for keyboard USERAUTH response". vf_sftp.c now keeps it and
+  says "the server closed the connection: <reason>", and does not try
+  keyboard-interactive on a connection the server has closed. Built on both
+  nodes; that message has not been seen live (the refusal is gone now).

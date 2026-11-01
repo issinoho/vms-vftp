@@ -6,7 +6,8 @@
 # [.LIVE.REMOTE], logged in with tools/live_key; with --ftp the node's own FTP
 # server as VFTPTEST (D11, the password in tools/live_ftp_pass, as live_ftp.sh).
 # Then it saves the connection as the site livesite (D14) and starts VFTP again
-# as "vftp livesite". Then the screens after the named steps (all if none).
+# as "vftp livesite". Over SFTP, last, a password login as VFTPTEST (D11, the
+# password in tools/live_ftp_pass). Then the screens after the named steps (all if none).
 # Output in out/live-dirs[-ftp]-<node>.txt.
 set -euo pipefail
 top=$(cd "$(dirname "$0")/.." && pwd)
@@ -27,23 +28,25 @@ cleanup() {
     "$top/tools/vms.sh" "$node" dcl 'delete/nolog [.tests.vms]live_dirs_keys.txt;*' > /dev/null 2>&1 || true
 }
 trap cleanup EXIT
+pass_file=$top/tools/live_ftp_pass           # VFTPTEST's: FTP, and SFTP's password login
+[ -f "$pass_file" ] || { echo "live_dirs.sh: no tools/live_ftp_pass" >&2; exit 2; }
+pass=$(head -n 1 "$pass_file")
+[ -n "$pass" ] || { echo "live_dirs.sh: tools/live_ftp_pass is empty" >&2; exit 2; }
+pesc=$(printf '%s' "$pass" | sed -e 's/[\\&|]/\\&/g')
 if [ -n "$ftp" ]; then
-    pass_file=$top/tools/live_ftp_pass
-    [ -f "$pass_file" ] || { echo "live_dirs.sh: no tools/live_ftp_pass" >&2; exit 2; }
-    pass=$(head -n 1 "$pass_file")
-    [ -n "$pass" ] || { echo "live_dirs.sh: tools/live_ftp_pass is empty" >&2; exit 2; }
     rdir=${VFTP_FTP_DIR:-'USER$ROOT:[VFTPTEST]'}
     sdir=$rdir                                    # the same directory, as DCL sees it
     tag=dirs-ftp-$node
     umask 077
-    pesc=$(printf '%s' "$pass" | sed -e 's/[\\&|]/\\&/g')
     sed -e "s|@PASS@|$pesc|" -e "s|@RDIR@|$rdir|" "$top/tests/vms/live_dirs_ftp.tpl" > "$keys"
     umask 022
 else
     rdir=$SFTPDIR/live/remote
     sdir=                                         # test_live.com: [.LIVE.REMOTE]
     tag=dirs-$node
-    sed -e "s/@PORT@/$PORT/" -e "s|@RDIR@|$rdir|" "$top/tests/vms/live_dirs.tpl" > "$keys"
+    umask 077
+    sed -e "s/@PORT@/$PORT/" -e "s|@RDIR@|$rdir|" -e "s|@PASS@|$pesc|" "$top/tests/vms/live_dirs.tpl" > "$keys"
+    umask 022
 fi
 "$top/tools/build.sh" "$node" TEST
 "$top/tools/vms.sh" "$node" run tests/vms/test_plat.com > "$top/out/plat-$node.txt" 2>&1
@@ -88,9 +91,10 @@ ok "Sites: the connection saved as livesite, no password line" \
    'grep -aq "^LIVE-SITES saved yes" "$out" && ! grep -aiq "^password" "$out"'
 if [ -n "$ftp" ]; then login='LOGIN vftptest@localhost:21 by password$'; else login="LOGIN [^ ]*@localhost:$PORT by key\$"; fi
 ok "Sites: \"vftp livesite\" logged in again from it" '[ "$(grep -ac "$login" "$out")" = 2 ]'
-if [ -n "$ftp" ]; then
-    ok "the password is in no output" '! grep -aqF -- "$pass" "$out" "$srv" "$top/out/plat-$node.txt"'
+if [ -z "$ftp" ]; then
+    ok "a password login by SSH: vftptest@localhost:$PORT" 'grep -aq "LOGIN vftptest@localhost:$PORT by password\$" "$out"'
 fi
+ok "the password is in no output" '! grep -aqF -- "$pass" "$out" "$srv" "$top/out/plat-$node.txt"'
 sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"
 args=()
 for s in "$@"; do args+=(--step "$s"); done

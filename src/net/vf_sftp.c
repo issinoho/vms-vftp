@@ -23,6 +23,7 @@ typedef struct {
     LIBSSH2_SFTP *sftp;
     char host[256];
     int port;
+    char bye[200];           /* the server's reason, if it closed the connection */
 } sftp_remote;
 
 typedef struct {
@@ -32,6 +33,21 @@ typedef struct {
 } sftp_file;
 
 static int inited;
+
+/* The server's SSH_MSG_DISCONNECT: libssh2 drops its text unless asked for it.
+   VMS sshd says why a login is refused only this way ("You are not authorized
+   to login from this source", N17). */
+static LIBSSH2_DISCONNECT_FUNC(on_bye)
+{
+    sftp_remote *r = (sftp_remote *) *abstract;
+    int i, n = 0;
+    (void) session; (void) reason; (void) language; (void) language_len;
+    if (!r || !message) return;
+    for (i = 0; i < message_len && n < (int) sizeof r->bye - 1; i++)
+        if ((unsigned char) message[i] >= ' ') r->bye[n++] = message[i];
+    while (n > 0 && r->bye[n - 1] == ' ') n--;
+    r->bye[n] = '\0';
+}
 
 static unsigned int fail(sftp_remote *r, const char *what)
 {
@@ -47,7 +63,9 @@ static unsigned int fail(sftp_remote *r, const char *what)
         unsigned long code = libssh2_sftp_last_error(r->sftp);
         snprintf(r->base.err, sizeof r->base.err, "%s%s%s", what, *what ? ": " : "",
                  code < sizeof names / sizeof names[0] ? names[code] : "SFTP error");
-    } else
+    } else if (r->bye[0])
+        snprintf(r->base.err, sizeof r->base.err, "%s%sthe server closed the connection: %s", what, *what ? ": " : "", r->bye);
+    else
         snprintf(r->base.err, sizeof r->base.err, "%s%s%s", what, *what ? ": " : "", msg && *msg ? msg : "SSH error");
     return VFR_FAIL;
 }
@@ -144,8 +162,9 @@ unsigned int vfr_sftp_connect(const char *host, int port, vf_remote **out, vfr_h
     r->port = port;
     r->fd = vfr_dial(host, port, err, errsz);
     if (r->fd < 0) { free(r); return VFR_FAIL; }
-    r->s = libssh2_session_init();
+    r->s = libssh2_session_init_ex(0, 0, 0, r);         /* r is the callbacks' abstract */
     if (!r->s) { close(r->fd); free(r); snprintf(err, (size_t) errsz, "no memory"); return VFR_FAIL; }
+    libssh2_session_callback_set2(r->s, LIBSSH2_CALLBACK_DISCONNECT, (libssh2_cb_generic *) on_bye);
     libssh2_session_set_blocking(r->s, 1);
     libssh2_session_set_timeout(r->s, 60000);
     if (libssh2_session_handshake(r->s, r->fd) != 0) {
@@ -253,7 +272,7 @@ static unsigned int sftp_login_password(vf_remote *rr, const char *user, const c
     int rc = -1;
     if (m && strstr(m, "password"))
         rc = libssh2_userauth_password(r->s, user, password);
-    if (rc != 0 && m && strstr(m, "keyboard-interactive")) {
+    if (rc != 0 && !r->bye[0] && m && strstr(m, "keyboard-interactive")) {
         /* VMS sshd asks for the password this way too */
         kbd_password = password;
         rc = libssh2_userauth_keyboard_interactive(r->s, user, kbd_answer);

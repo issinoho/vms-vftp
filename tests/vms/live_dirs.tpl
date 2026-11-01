@@ -6,6 +6,8 @@
 # site livesite (D14) and VFTP started again as "vftp livesite". Up a directory is
 # Backspace (DEL, \x7f) and the Get is F5 (Copy, from the server pane) here; the FTP
 # script uses Left and G.
+# Last, a password login (keyboard-interactive or password) as VFTPTEST (D11);
+# tools/live_dirs.sh fills in @PASS@ and deletes the filled file after the run.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 2 host | \x05\x15localhost
@@ -44,4 +46,9 @@
 10 connect site | \e[29~
 5 site in | \x17
 3 exit again | \e[21~
+8 start password | vftp vftptest@localhost:@PORT@\r
+2 password | @PASS@
+10 connect password | \e[29~
+5 password in | \x17
+3 exit password | \e[21~
 2 logout check | show default\r
