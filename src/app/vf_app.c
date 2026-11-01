@@ -510,13 +510,18 @@ static int get_one(vf_app *a, const vf_step *s, char *err, int esz)
     vf_strlcpy(a->xfer_name, s->name, sizeof a->xfer_name);
     a->xfer_done = 0; a->xfer_total = s->size;
     st = vfr_open_read(a->rem, rpath, text, &rf);
-    if (!(st & 1)) { snprintf(err, (size_t) esz, "%s: %s", s->name, vfr_error(a->rem)); return 0; }
+    if (!(st & 1)) {
+        snprintf(err, (size_t) esz, "%s: %s", s->name, vfr_error(a->rem));
+        logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
+        return 0;
+    }
     st = vfp_open_write(lspec, text, s->size, &lf, result, sizeof result);
     if (!(st & 1)) {
         char m[200];
         vfr_close(rf);
         status_text(st, m, sizeof m);
         snprintf(err, (size_t) esz, "%s: %s", lspec, m);
+        logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
         return 0;
     }
     vf_lines_init(&a->lines);
@@ -551,6 +556,7 @@ static int get_one(vf_app *a, const vf_step *s, char *err, int esz)
         char m[200];
         status_text(st, m, sizeof m);
         snprintf(err, (size_t) esz, "%s: %s", result, m);
+        logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
         return 0;
     }
     logf_("GET %s -> %s %s %llu bytes", rpath, result, text ? "ASCII" : "BINARY", a->xfer_done);
@@ -580,6 +586,7 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
         char m[200];
         status_text(st, m, sizeof m);
         snprintf(err, (size_t) esz, "%s: %s", lspec, m);
+        logf_("PUT %s -> %s FAILED: %s", lspec, rpath, err);
         return 0;
     }
     a->xfer_text = text;
@@ -588,6 +595,7 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
     if (!(st & 1)) {
         vfp_close(lf, 1);
         snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem));
+        logf_("PUT %s -> %s FAILED: %s", lspec, wpath, err);
         return 0;
     }
     progress(a, 1);

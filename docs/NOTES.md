@@ -307,5 +307,14 @@ In the directory test, after the Get, GOLD A on the server's R.TXT;1 (x86 and IA
   keeps VMS protection"); a VMS server's listing has VMS protection, not modes (N8).
   Whether TCP/IP Services takes SITE CHMOD was not tried (N8 saw SITE VMS and
   SITE UNIX); VMS protection from here would be its own piece of work.
-The Unix servers (setstat to OpenSSH, SITE CHMOD to pyftpdlib) are in
-live_unix.sh and live_unix_ftp.sh (GOLD A `go-r` on moved.txt, checked with stat).
+The Unix servers, GOLD A `go-r` on moved.txt, checked with stat on Linux (run by the
+user, both nodes): setstat to OpenSSH (live_unix.sh), SITE CHMOD to pyftpdlib, plain
+(live_unix_ftp.sh, all 11 checks) and with TLS (--tls, all 14). The test server
+makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
+- Not explained yet: in live_unix.sh on x86 (IA64 passed all 9), the Get of r.txt
+  failed at once ("0 copied, 1 failed: r.txt: .../r.txt:", cut at 80 columns) and
+  View of the same file a moment later worked. The server's journal has one open
+  of r.txt, the View's; a 60 s timeout cannot have struck that fast. VFTP did not
+  log a Get that fails at the open: it does now (and a Put, and a failed close),
+  with the whole error, for the next run. The ssh to x86 had timed out an hour
+  before ("server not responding").
