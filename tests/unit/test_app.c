@@ -454,6 +454,84 @@ static void test_dirs(void)
     CHECK(!vf_pane_find(&a->pane[PANE_REMOTE], "data")->tagged);
 }
 
+/* The sites file (D9, D14) */
+static void test_sites(void)
+{
+    vf_app *a = &app;
+    const char *d;
+    int len, vers = 0;
+    const char *file = "STUB$DKA0:[USERS.TEST]VFTP.SITES";
+    start(24, 80, "test@test.example");
+    type(a, "secret"); key(a, VK_DO); key(a, 'Y');
+    CHECK(a->rem != 0);
+    key(a, 'L');
+    CHECK(a->mode == M_SITES && a->sites.n == 0);
+    snap(a, "20_sites_empty");
+    /* A: the Open form as a site, never the password */
+    key(a, 'A');
+    CHECK(a->prompt == P_SITE && !strcmp(a->pedit.buf, "test.example"));
+    erase(a); type(a, "home"); key(a, VK_RETURN);
+    d = stub_local(file, &len, 0, &vers);
+    CHECK(d && vers == 1);
+    CHECK(d && strstr(d, "[home]\nprotocol = SFTP\nhost = test.example\nport = 22\nuser = test\n") != 0);
+    CHECK(d && strstr(d, "local = STUB$DKA0:[USERS.TEST]\n") != 0);
+    CHECK(d && !strstr(d, "secret") && !strstr(d, "assword ="));
+    CHECK(strstr(a->msg, "Saved the site home") != 0);
+    snap(a, "21_sites");
+    /* the same name again asks first; N leaves the file */
+    key(a, 'A'); key(a, VK_RETURN);
+    CHECK(a->prompt == P_ASK && a->ask == ASK_SITE_REPLACE);
+    key(a, 'n');
+    CHECK(a->mode == M_SITES && stub_local(file, 0, 0, &vers) && vers == 1);
+    key(a, 'A'); key(a, VK_RETURN); key(a, 'y');
+    CHECK(stub_local(file, 0, 0, &vers) && vers == 2);          /* a new version */
+    /* Return: the Open form filled, the cursor on the password */
+    key(a, VK_F10);
+    key(a, VK_PF1); key(a, 'O');                                 /* close the connection */
+    CHECK(!a->rem);
+    key(a, 'L'); key(a, VK_RETURN);
+    CHECK(a->mode == M_FORM && a->fcur == FF_PASSWORD && !strcmp(a->fv[FF_HOST], "test.example"));
+    CHECK(a->fv[FF_PASSWORD][0] == '\0');
+    snap(a, "22_site_form");
+    type(a, "secret"); key(a, VK_DO);
+    CHECK(a->rem != 0);
+    /* D asks; Y deletes */
+    key(a, 'L'); key(a, 'D');
+    CHECK(a->prompt == P_ASK && a->ask == ASK_SITE_DELETE);
+    key(a, 'x');
+    CHECK(a->sites.n == 1);
+    key(a, 'D'); key(a, 'Y');
+    CHECK(a->sites.n == 0 && strstr(a->msg, "Deleted the site home") != 0);
+    d = stub_local(file, &len, 0, &vers);
+    CHECK(d && vers == 3 && !strstr(d, "[home]"));
+
+    /* a line VFTP cannot read: the rest is used, nothing is saved over it */
+    {
+        const char *t = "[old]\nhost = test.example\npassword = hunter2\n";
+        stub_add_local("STUB$DKA0:[USERS.TEST]", "VFTP.SITES", 1, t, (int) strlen(t));
+    }
+    key(a, VK_F10); key(a, 'L');
+    CHECK(a->sites.n == 1 && a->sites.bad == 1);
+    CHECK(strstr(a->msg, "line 3: passwords are never kept") != 0);
+    key(a, 'A'); erase(a); type(a, "new"); key(a, VK_RETURN);
+    CHECK(strstr(a->msg, "Nothing saved") != 0);
+    CHECK(stub_local(file, 0, 0, &vers) && vers == 4);
+
+    /* "vftp work": the site by name from the command line */
+    vf_app_free(a);
+    stub_reset();
+    {
+        const char *t = "[work]\nhost = test.example\nuser = test\nremote = /home/test/data\nlocal = [.WORK]\n";
+        stub_add_local("STUB$DKA0:[USERS.TEST]", "VFTP.SITES", 1, t, (int) strlen(t));
+    }
+    vfp_start(&a->sess);
+    CHECK(vf_app_init(a, "work", 24, 80));
+    CHECK(a->mode == M_FORM && a->fcur == FF_PASSWORD && !strcmp(a->fv[FF_DIR], "/home/test/data"));
+    CHECKS(a->pane[PANE_LOCAL].dir, "STUB$DKA0:[USERS.TEST.WORK]");
+    type(a, "secret"); key(a, VK_DO); key(a, 'Y');
+    CHECKS(a->pane[PANE_REMOTE].dir, "/home/test/data");
+}
+
 int main(void)
 {
     test_connect();
@@ -462,6 +540,7 @@ int main(void)
     test_ftp_login();
     test_manage();
     test_dirs();
+    test_sites();
     test_screens();
     vf_app_free(&app);
     printf("test_app: %d checks, %d failed\n", checks, fails);

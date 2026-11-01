@@ -4,7 +4,7 @@
 CC ?= cc
 CFLAGS = -std=c99 -pedantic -Wall -Wextra -Werror -Wno-format-truncation -g -Isrc/core -Isrc/app -Isrc/net -Isrc/plat -Isrc/plat/stub
 CORE = src/core/vf_util.c src/core/vf_edit.c src/core/vf_screen.c src/core/vf_ansi.c \
-       src/core/vf_pane.c src/core/vf_path.c src/core/vf_text.c src/core/vf_ftpcore.c
+       src/core/vf_pane.c src/core/vf_path.c src/core/vf_text.c src/core/vf_ftpcore.c src/core/vf_sites.c
 APP = src/app/vf_app.c src/app/vf_draw.c
 STUB = src/plat/stub/vf_plat_stub.c src/plat/stub/vf_remote_stub.c
 HDRS = $(wildcard src/core/*.h src/app/*.h src/net/*.h src/plat/*.h src/plat/stub/*.h)

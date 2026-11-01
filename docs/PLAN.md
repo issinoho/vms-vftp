@@ -129,7 +129,8 @@ as up, and a password login by hand against a real server.
 
 Status 2026-11-01: whole directories (D13): Get and Put take directories, the tree
 read first so the replace screen names every file at any depth; live on both nodes
-by SFTP and by FTP (N14).
+by SFTP and by FTP (N14). The sites file (D9, D14): `L`, saved from the Open form,
+`vftp <name>`; live on both nodes by SFTP and FTP (N15).
 
 ## Phase 4: kits and release
 

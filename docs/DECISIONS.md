@@ -135,3 +135,26 @@ Considered: copying while reading (no full list to confirm, and the replace
 question would come file by file, mid-transfer); following links (loops, and the
 same files twice); asking before every directory (noise: copying a directory into
 one that does not hold it changes nothing that is there).
+
+## D14. The sites file: blocks of "key = value", saved from the Open form (2026-11-01, proposed)
+
+`VFTP$SITES` (default `SYS$LOGIN:VFTP.SITES`), a text file to read and edit by
+hand: a `[name]` line starts a site, then `protocol`, `host`, `port`, `user`, `key`,
+`remote` and `local` (the starting directories), each `key = value`; `!` or `#`
+starts a comment. There is no password key: a `password` (or `passphrase`) line is
+refused (D9).
+- `L` shows the sites. Return fills the Open form from one (empty fields keep the
+  form's defaults; the local pane goes to `local`), the cursor on the password, so
+  a key login is Do and a password login is the password and Do. `A` saves what the
+  Open form holds, with the local pane's directory, under a name (the host by
+  default; the same name asks before replacing). `D` deletes one, after asking.
+- `vftp <name>` (a word with no `@` or `:`) opens the site of that name.
+- The file is read again each time (it may have been edited); a save is a new
+  version, written whole, sorted by name, comments other than VFTP's not kept.
+- A line VFTP cannot read (an unknown key, a password, a key before any `[name]`)
+  is left out, the rest is used, and nothing is saved over the file until it is
+  put right: saving would lose that line.
+Considered: one line per site with separators (hard to read, and a Unix path may
+have spaces); saving after every connection (sites the user never asked for);
+keeping comments in place (VFTP would have to rewrite the user's file line by
+line; the old version stays on disk anyway).

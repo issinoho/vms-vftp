@@ -791,6 +791,12 @@ void vfp_ssh_file(const char *name, char *out, int size)
     snprintf(out, (size_t) size, "%s%s.", dir, name);
 }
 
+void vfp_login_file(const char *name, char *out, int size)
+{
+    const char *login = getenv("SYS$LOGIN");
+    snprintf(out, (size_t) size, "%s%s", login ? login : "SYS$LOGIN:", name);
+}
+
 int vfp_exists(const char *spec)
 {
     static char esa[NAML$C_MAXRSS + 1], rsa[NAML$C_MAXRSS + 1];

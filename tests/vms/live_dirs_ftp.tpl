@@ -3,7 +3,8 @@
 # (tools/live_ftp_pass; the filled file is deleted from the node after the run) and
 # @RDIR@ (the account's login directory). "<secs> <label> | <keys>". No TLS: the
 # D10 question is answered Y. In [.LIVE] the order is [-], BACK, DIRS, REMOTE,
-# SSH; on the server .., then the directory put.
+# SSH; on the server .., then the directory put. Then the connection is saved as
+# the site livesite (D14) and VFTP started again as "vftp livesite".
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 2 to protocol | \e[A
@@ -35,5 +36,15 @@
 3 local back | \x05\x15[.BACK]\r
 2 to remote last | \x09
 8 get dirs | g
+2 sites | l
+2 site add | a
+2 site name | \x05\x15livesite\r
+3 sites back | \e[21~
 3 exit | \e[21~
+8 start site | vftp livesite\r
+2 site password | @PASS@
+6 connect site | \e[29~
+3 site clear | y
+5 site in | \x17
+3 exit again | \e[21~
 2 logout check | show default\r

@@ -278,3 +278,20 @@ on x86 and IA64, both protocols:
   two passes, leaving `dirs.DIR` in [VFTPTEST], which shifted the rows the FTP
   test's key script counts (its R.TXT check failed). They now make a fixed eight
   passes (one per level), and live_server.com stops if anything is left.
+
+## N15. The sites file on both nodes, by SFTP and FTP (2026-11-01, tools/live_dirs.sh)
+
+At the end of the directory test (N14) the key script presses L, A, names the
+connection `livesite`, leaves VFTP and starts it again as `vftp livesite`. SYS$LOGIN
+is `[.LIVE]` while VFTP runs, so the file is `[.LIVE]VFTP.SITES`, never the real one.
+On x86 and IA64, by SFTP (key) and FTP (VFTPTEST, password typed again):
+- The file is a variable-record text file TYPE shows as written: VFTP's three comment
+  lines, `[livesite]`, protocol, host, port, user, key, remote, and local (the local
+  pane's `[.LIVE.BACK]`). No password line; the FTP run's password is in no output.
+- `vftp livesite` opens the Open form filled ("Open a connection: the site
+  livesite"), the local pane in `[.LIVE.BACK]`, the cursor on the password. SFTP:
+  Do logs in by key (the host key known from the first login); FTP: the password,
+  Do, and the D10 question again. The log has two LOGIN lines each time, the
+  second into the saved remote directory.
+- Seen there: an FTP site was saved with the form's default key file, which FTP
+  never uses; it is now left out of an FTP site (Linux tests only since).

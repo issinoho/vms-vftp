@@ -10,6 +10,7 @@
 #include "vf_pane.h"
 #include "vf_path.h"
 #include "vf_text.h"
+#include "vf_sites.h"
 
 static int checks, fails;
 #define CHECK(c) do { checks++; if (!(c)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
@@ -229,6 +230,79 @@ static void test_pane(void)
     CHECKS(vf_fmt_perms(0750, 1, 0, b, sizeof b), "drwxr-x---");
 }
 
+static char written[4096];
+static unsigned int collect_line(void *ctx, const char *line, int len)
+{
+    (void) ctx;
+    strncat(written, line, (size_t) len);
+    strcat(written, "\n");
+    return 1;
+}
+
+static void test_sites(void)
+{
+    vf_sites t;
+    vf_site s;
+    static const char *file[] = {
+        "! my sites", "", "[work]", "protocol = sftp", "host = build.example.com", "port=2222",
+        "user = iain", "key = USER$ROOT:[IAIN.SSH]ID_ED25519.", "remote = /home/iain/src",
+        "[ Old FTP ]", "protocol = FTP", "host = vax.example.com", "local = DKA0:[IAIN.OLD]",
+    };
+    int i;
+    vf_sites_init(&t);
+    for (i = 0; i < (int) (sizeof file / sizeof *file); i++) vf_sites_line(&t, file[i]);
+    CHECK(t.n == 2 && !t.bad);
+    CHECKS(t.s[0].proto, "SFTP"); CHECKS(t.s[0].port, "2222"); CHECKS(t.s[0].remote, "/home/iain/src");
+    CHECKS(t.s[1].name, "Old FTP"); CHECKS(t.s[1].proto, "FTP"); CHECKS(t.s[1].local, "DKA0:[IAIN.OLD]");
+    CHECK(vf_sites_find(&t, "old ftp") == 1 && vf_sites_find(&t, "home") == -1);
+    /* written back sorted by name, then read again the same */
+    written[0] = '\0';
+    CHECK(vf_sites_write(&t, collect_line, 0) & 1);
+    CHECK(strstr(written, "[Old FTP]\nprotocol = FTP\nhost = vax.example.com\nlocal = DKA0:[IAIN.OLD]\n\n[work]\n") != 0);
+    CHECK(!strstr(written, "port = \n"));                    /* empty fields left out */
+    {
+        vf_sites u;
+        char *line = written, *nl;
+        vf_sites_init(&u);
+        while ((nl = strchr(line, '\n')) != 0) { *nl = '\0'; vf_sites_line(&u, line); line = nl + 1; }
+        CHECK(u.n == 2 && !u.bad && !strcmp(u.s[1].key, "USER$ROOT:[IAIN.SSH]ID_ED25519."));
+        vf_sites_free(&u);
+    }
+    /* add, replace by name, remove */
+    memset(&s, 0, sizeof s);
+    vf_strlcpy(s.name, "home", sizeof s.name); vf_strlcpy(s.host, "h.example", sizeof s.host);
+    CHECK(vf_sites_put(&t, &s) && t.n == 3);
+    vf_strlcpy(s.name, "WORK", sizeof s.name);
+    CHECK(vf_sites_put(&t, &s) && t.n == 3 && !strcmp(t.s[0].host, "h.example"));
+    vf_sites_remove(&t, 0);
+    CHECK(t.n == 2 && vf_sites_find(&t, "work") == -1);
+    vf_strlcpy(s.name, "a]b", sizeof s.name);
+    CHECK(!vf_sites_put(&t, &s) && !vf_site_name_ok("  ") && vf_site_name_ok("x"));
+    vf_sites_free(&t);
+
+    /* lines it cannot read: left out, the first remembered (and the app saves nothing) */
+    vf_sites_init(&t);
+    vf_sites_line(&t, "host = early");
+    vf_sites_line(&t, "[x]");
+    vf_sites_line(&t, "password = secret");
+    vf_sites_line(&t, "colour = blue");
+    vf_sites_line(&t, "protocol = scp");
+    vf_sites_line(&t, "port = 22a");
+    vf_sites_line(&t, "[y]");
+    vf_sites_line(&t, "host = ok");
+    vf_sites_line(&t, "[X]");                                  /* a second x */
+    CHECK(t.bad == 6 && t.n == 2);
+    CHECKS(t.why, "line 1: a key before the first [name]");
+    CHECKS(t.s[1].host, "ok");
+    CHECK(!t.s[0].host[0]);
+    vf_sites_free(&t);
+    vf_sites_init(&t);
+    vf_sites_line(&t, "[x]");
+    vf_sites_line(&t, "Password=secret");
+    CHECKS(t.why, "line 2: passwords are never kept (D9): take the line out");
+    vf_sites_free(&t);
+}
+
 int main(void)
 {
     test_util();
@@ -237,6 +311,7 @@ int main(void)
     test_pane();
     test_edit();
     test_screen();
+    test_sites();
     printf("test_core: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

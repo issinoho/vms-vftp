@@ -5,7 +5,8 @@
 # (tests/vms/test_live.com DIRS). The server is the node's own sshd, its side
 # [.LIVE.REMOTE], logged in with tools/live_key; with --ftp the node's own FTP
 # server as VFTPTEST (D11, the password in tools/live_ftp_pass, as live_ftp.sh).
-# Then the screens after the named steps (all if none).
+# Then it saves the connection as the site livesite (D14) and starts VFTP again
+# as "vftp livesite". Then the screens after the named steps (all if none).
 # Output in out/live-dirs[-ftp]-<node>.txt.
 set -euo pipefail
 top=$(cd "$(dirname "$0")/.." && pwd)
@@ -77,6 +78,10 @@ ok "Get: A.TXT and C.TXT back as the same records" 'same "back a.txt" && same "b
 ok "Get: B.BIN back byte for byte" 'same "back b.bin"'
 ok "Get: one version of each file from the server's two" 'grep -aq "^LIVE-DIRS back one version yes" "$out"'
 ok "Get: the empty directory made" 'grep -aq "^LIVE-DIRS back empty yes" "$out"'
+ok "Sites: the connection saved as livesite, no password line" \
+   'grep -aq "^LIVE-SITES saved yes" "$out" && ! grep -aiq "^password" "$out"'
+if [ -n "$ftp" ]; then login='LOGIN vftptest@localhost:21 by password$'; else login="LOGIN [^ ]*@localhost:$PORT by key\$"; fi
+ok "Sites: \"vftp livesite\" logged in again from it" '[ "$(grep -ac "$login" "$out")" = 2 ]'
 if [ -n "$ftp" ]; then
     ok "the password is in no output" '! grep -aqF -- "$pass" "$out" "$srv" "$top/out/plat-$node.txt"'
 fi

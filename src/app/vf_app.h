@@ -11,10 +11,11 @@
 #include "vf_text.h"
 #include "vf_platform.h"
 #include "vf_remote.h"
+#include "vf_sites.h"
 
-enum { M_MAIN, M_HELP, M_VIEW, M_INFO, M_FORM, M_CONFIRM };
-enum { P_NONE, P_FILTER, P_RENAME, P_MKDIR, P_TAG, P_JUMP, P_ASK };
-enum { ASK_DELETE = 1, ASK_REPLACE, ASK_HOSTKEY, ASK_CLEARPW };
+enum { M_MAIN, M_HELP, M_VIEW, M_INFO, M_FORM, M_CONFIRM, M_SITES };
+enum { P_NONE, P_FILTER, P_RENAME, P_MKDIR, P_TAG, P_JUMP, P_ASK, P_SITE };
+enum { ASK_DELETE = 1, ASK_REPLACE, ASK_HOSTKEY, ASK_CLEARPW, ASK_SITE_REPLACE, ASK_SITE_DELETE };
 enum { X_AUTO, X_ASCII, X_BINARY };
 enum { PANE_LOCAL, PANE_REMOTE };
 
@@ -76,6 +77,13 @@ typedef struct {
     int fcur;
     vf_edit fedit;
     char form_err[256];
+
+    /* the sites file (D9, D14) and the Sites screen */
+    vf_sites sites;
+    char sites_file[VF_SPEC_MAX];
+    int site_cur, site_top;
+    char site_name[VF_SITE_NAME];   /* the site the Open form was filled from */
+    vf_site site_new;               /* being saved, while the replace question is up */
 
     /* the prompt line */
     int prompt;

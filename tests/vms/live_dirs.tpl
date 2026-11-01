@@ -2,7 +2,8 @@
 # node's own sshd (tools/live_dirs.sh fills in @PORT@ and @RDIR@, [.LIVE.REMOTE]),
 # logged in with the test key. "<secs> <label> | <keys>". PTYDRIVE knows \r \e \\
 # \xHH only: Tab is \x09. In [.LIVE] the order is [-], BACK, DIRS, REMOTE, SSH;
-# on the server .., then the directory put.
+# on the server .., then the directory put. Then the connection is saved as the
+# site livesite (D14) and VFTP started again as "vftp livesite".
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 2 host | \x05\x15localhost
@@ -29,5 +30,13 @@
 3 local back | \x05\x15[.BACK]\r
 2 to remote last | \x09
 8 get dirs | g
+2 sites | l
+2 site add | a
+2 site name | \x05\x15livesite\r
+3 sites back | \e[21~
 3 exit | \e[21~
+8 start site | vftp livesite\r
+10 connect site | \e[29~
+5 site in | \x17
+3 exit again | \e[21~
 2 logout check | show default\r

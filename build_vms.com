@@ -25,7 +25,7 @@ $! compiled /NAMES=(AS_IS,SHORTENED) so that they all agree.
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES" -
          + "/NAMES=(AS_IS,SHORTENED)" -
          + "/INCLUDE=([.src.core],[.src.app],[.src.net],[.src.plat],[.src.plat.vms],[.src.plat.stub],''ssh2inc')"
-$ core = "vf_util,vf_edit,vf_screen,vf_ansi,vf_pane,vf_path,vf_text,vf_ftpcore"
+$ core = "vf_util,vf_edit,vf_screen,vf_ansi,vf_pane,vf_path,vf_text,vf_ftpcore,vf_sites"
 $ app = "vf_app,vf_draw"
 $ i = 0
 $ core_loop:

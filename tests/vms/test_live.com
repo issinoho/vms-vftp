@@ -173,6 +173,16 @@ $ write sys$output "LIVE-DIRS back one version ''yes'"
 $ yes = "no"
 $ if f$search(bk + "empty.dir") .nes. "" then yes = "yes"
 $ write sys$output "LIVE-DIRS back empty ''yes'"
+$! the site saved at the end (D14): SYS$LOGIN is [.LIVE] while VFTP runs
+$ write sys$output "==== the sites file"
+$ yes = "no"
+$ if f$search(live + "vftp.sites") .eqs. "" then goto no_sites
+$ type 'live'vftp.sites
+$ define/user sys$output nl:
+$ search 'live'vftp.sites "[livesite]"
+$ if $severity .eq. 1 then yes = "yes"
+$ no_sites:
+$ write sys$output "LIVE-SITES saved ''yes'"
 $ log:
 $ write sys$output "==== VFTP log"
 $ if f$search(live + "vftp.log") .nes. "" then type 'live'vftp.log

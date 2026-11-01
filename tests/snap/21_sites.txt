@@ -1,0 +1,24 @@
+ VFTP  Saved sites   STUB$DKA0:[USERS.TEST]VFTP.SITES         25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Site              Proto User@host:port                Remote directory       │
+│ home              SFTP  test@test.example:22                                 │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Saved the site home (no password) in STUB$DKA0:[USERS.TEST]VFTP.SITES
+ COMMANDS  Up/Down choose   No password is ever saved   F10 back

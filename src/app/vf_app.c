@@ -155,6 +155,8 @@ static void parse_target(vf_app *a, const char *t)
 }
 
 static void form_open(vf_app *a);
+static int sites_load(vf_app *a);
+static void site_use(vf_app *a, const vf_site *s);
 
 int vf_app_init(vf_app *a, const char *target, int rows, int cols)
 {
@@ -176,6 +178,12 @@ int vf_app_init(vf_app *a, const char *target, int rows, int cols)
     else { vfp_message(st, t, sizeof t); vf_set_msg(a, 1, "Current directory: %s", t); }
     read_local(a);
     form_defaults(a);
+    vf_sites_init(&a->sites);
+    /* "vftp work": a saved site of that name (D14) */
+    if (target && *target && !strpbrk(target, "@:") && sites_load(a)) {
+        int i = vf_sites_find(&a->sites, target);
+        if (i >= 0) { site_use(a, &a->sites.s[i]); return 1; }
+    }
     if (target && *target) parse_target(a, target);
     form_open(a);
     if (!target || !*target) a->fcur = FF_HOST;
@@ -193,6 +201,7 @@ void vf_app_free(vf_app *a)
     a->rem = 0;
     text_free(a);
     steps_free(a);
+    vf_sites_free(&a->sites);
     vf_pane_free(&a->pane[0]);
     vf_pane_free(&a->pane[1]);
     vf_screen_free(&a->scr);
@@ -1260,6 +1269,7 @@ static void help_build(vf_app *a)
     text_add(a, "  J                            jump to a directory (a VMS spec or a path)");
     text_add(a, "CONNECTION");
     text_add(a, "  O                            open (SFTP or FTP); GOLD O closes it");
+    text_add(a, "  L                            saved sites: open one, save the Open form's");
     text_add(a, "FILES");
     text_add(a, "  G  Get                       download the tagged (or current) entries");
     text_add(a, "  P  Put                       upload the tagged (or current) entries");
@@ -1285,6 +1295,209 @@ static void help_build(vf_app *a)
     text_add(a, "  Each operation is logged in VFTP$LOG (default SYS$LOGIN:VFTP.LOG).");
     a->back_mode = a->mode == M_FORM ? M_FORM : M_MAIN;
     a->mode = M_HELP;
+}
+
+/* ---------- the sites file (D9, D14) ---------- */
+
+static void start_prompt(vf_app *a, int kind, const char *label, const char *initial);
+
+/* VFTP$SITES, or SYS$LOGIN:VFTP.SITES */
+static void sites_spec(vf_app *a)
+{
+    vfp_getenv("VFTP$SITES", a->sites_file, sizeof a->sites_file);
+    if (!a->sites_file[0]) vfp_login_file("VFTP.SITES", a->sites_file, sizeof a->sites_file);
+}
+
+/* Read the file again each time (it may have been edited by hand). 0 when it
+   cannot be read; then nothing will be saved over it either. */
+static int sites_load(vf_app *a)
+{
+    char line[1024], m[200];
+    vfp_file *f;
+    unsigned int st;
+    unsigned long long est;
+    int text = 1, got;
+    vf_sites_free(&a->sites);
+    sites_spec(a);
+    if (!vfp_exists(a->sites_file)) return 1;              /* none yet */
+    st = vfp_open_read(a->sites_file, &text, &est, &f);
+    if (st & 1) {
+        while ((st = vfp_read(f, line, (int) sizeof line - 1, &got)) & 1) {
+            line[got] = '\0';
+            vf_sites_line(&a->sites, line);
+        }
+        vfp_close(f, 1);
+        if (st == VFP_EOF) { vf_sites_sort(&a->sites); return 1; }
+    }
+    status_text(st, m, sizeof m);
+    a->sites.bad++;
+    snprintf(a->sites.why, sizeof a->sites.why, "%s", m);
+    vf_set_msg(a, 1, "%s: %s", a->sites_file, m);
+    return 0;
+}
+
+static unsigned int site_write_line(void *ctx, const char *line, int len)
+{
+    return vfp_write((vfp_file *) ctx, line, len);
+}
+
+/* A new version of the file with a->sites in it. Never over a file that had a
+   line VFTP could not read: that line would be lost. */
+static int sites_save(vf_app *a)
+{
+    char result[VF_SPEC_MAX], m[200];
+    vfp_file *f;
+    unsigned int st;
+    if (a->sites.bad) {
+        vf_set_msg(a, 1, "Nothing saved: %s has a line VFTP cannot read (%s)", a->sites_file, a->sites.why);
+        return 0;
+    }
+    st = vfp_open_write(a->sites_file, 1, 0, &f, result, sizeof result);
+    if (st & 1) {
+        st = vf_sites_write(&a->sites, site_write_line, f);
+        {
+            unsigned int cs = vfp_close(f, st & 1);
+            if (st & 1) st = cs;
+        }
+    }
+    if (!(st & 1)) {
+        status_text(st, m, sizeof m);
+        vf_set_msg(a, 1, "Nothing saved: %s: %s", a->sites_file, m);
+        return 0;
+    }
+    logf_("SITES %s written, %d site%s", result, a->sites.n, a->sites.n == 1 ? "" : "s");
+    return 1;
+}
+
+/* Fill the Open form from a site and open it, the cursor on the password (a key
+   login needs none: Do). Empty fields keep the defaults. */
+static void site_use(vf_app *a, const vf_site *s)
+{
+    int ftp = !vf_strcasecmp(s->proto, "FTP");
+    vf_site keep = *s;                  /* s may be in a->sites */
+    wipe(a->fv[FF_PASSWORD], VF_FIELD);
+    wipe(a->fv[FF_PHRASE], VF_FIELD);
+    form_defaults(a);
+    vf_strlcpy(a->fv[FF_PROTO], ftp ? "FTP" : "SFTP", VF_FIELD);
+    vf_strlcpy(a->fv[FF_HOST], keep.host, VF_FIELD);
+    vf_strlcpy(a->fv[FF_PORT], keep.port[0] ? keep.port : ftp ? "21" : "22", VF_FIELD);
+    if (keep.user[0]) vf_strlcpy(a->fv[FF_USER], keep.user, VF_FIELD);
+    if (keep.key[0]) vf_strlcpy(a->fv[FF_KEY], keep.key, VF_FIELD);
+    vf_strlcpy(a->fv[FF_DIR], keep.remote, VF_FIELD);
+    vf_strlcpy(a->site_name, keep.name, sizeof a->site_name);
+    if (keep.local[0]) {
+        int was = a->act;
+        a->act = PANE_LOCAL;
+        jump(a, keep.local);
+        a->act = was;
+    }
+    form_open(a);
+    a->fcur = FF_PASSWORD;
+    vf_edit_init(&a->fedit, a->fv[a->fcur]);
+}
+
+static void sites_open(vf_app *a)
+{
+    sites_load(a);
+    a->mode = M_SITES;
+    if (a->site_cur >= a->sites.n) a->site_cur = a->sites.n - 1;
+    if (a->site_cur < 0) a->site_cur = 0;
+    if (a->sites.n && a->site_name[0]) {
+        int i = vf_sites_find(&a->sites, a->site_name);
+        if (i >= 0) a->site_cur = i;
+    }
+    if (a->sites.bad && !a->msg_err)
+        vf_set_msg(a, 1, "%d line%s left out, so nothing will be saved: %s", a->sites.bad,
+                   a->sites.bad == 1 ? "" : "s", a->sites.why);
+}
+
+/* A: the Open form as a site (no password: there is no field for one) */
+static void site_add_start(vf_app *a)
+{
+    if (!a->fv[FF_HOST][0]) { vf_set_msg(a, 1, "The Open form has no host yet: O fills it, then L and A"); return; }
+    start_prompt(a, P_SITE, "Save the Open form as the site: ", a->site_name[0] ? a->site_name : a->fv[FF_HOST]);
+}
+
+static void site_store(vf_app *a)
+{
+    vf_site s = a->site_new;
+    sites_load(a);                      /* as it is now, in case it was edited */
+    if (!vf_sites_put(&a->sites, &s)) { vf_set_msg(a, 1, "Nothing saved: no memory"); return; }
+    vf_sites_sort(&a->sites);
+    if (!sites_save(a)) return;
+    a->site_cur = vf_sites_find(&a->sites, s.name);
+    vf_strlcpy(a->site_name, s.name, sizeof a->site_name);
+    vf_set_msg(a, 0, "Saved the site %s (no password) in %s", s.name, a->sites_file);
+}
+
+static void site_add_done(vf_app *a, const char *name)
+{
+    vf_site *s = &a->site_new;
+    if (!name[0]) return;
+    if (!vf_site_name_ok(name)) { vf_set_msg(a, 1, "Not saved: a name has no [ or ], and up to %d characters", VF_SITE_NAME - 1); return; }
+    memset(s, 0, sizeof *s);
+    vf_strlcpy(s->name, name, sizeof s->name);
+    vf_strlcpy(s->proto, proto_of(a->fv[FF_PROTO]) == VFR_FTP ? "FTP" : "SFTP", sizeof s->proto);
+    vf_strlcpy(s->host, a->fv[FF_HOST], sizeof s->host);
+    vf_strlcpy(s->port, a->fv[FF_PORT], sizeof s->port);
+    vf_strlcpy(s->user, a->fv[FF_USER], sizeof s->user);
+    if (proto_of(a->fv[FF_PROTO]) != VFR_FTP) vf_strlcpy(s->key, a->fv[FF_KEY], sizeof s->key);   /* FTP has none */
+    vf_strlcpy(s->remote, a->fv[FF_DIR], sizeof s->remote);
+    vf_strlcpy(s->local, a->pane[PANE_LOCAL].dir, sizeof s->local);
+    vf_trim(s->host); vf_trim(s->port); vf_trim(s->user);
+    if (vf_sites_find(&a->sites, name) >= 0) {
+        char l[128];
+        snprintf(l, sizeof l, "Replace the site %s? (Y/N) [N]: ", name);
+        a->prompt = P_ASK; a->ask = ASK_SITE_REPLACE;
+        vf_strlcpy(a->prompt_label, l, sizeof a->prompt_label);
+        vfp_flush_keys();
+        return;
+    }
+    site_store(a);
+}
+
+static void site_delete_start(vf_app *a)
+{
+    char l[128];
+    if (!a->sites.n) return;
+    snprintf(l, sizeof l, "Delete the site %s? (Y/N) [N]: ", a->sites.s[a->site_cur].name);
+    vf_strlcpy(a->site_new.name, a->sites.s[a->site_cur].name, sizeof a->site_new.name);
+    a->prompt = P_ASK; a->ask = ASK_SITE_DELETE;
+    vf_strlcpy(a->prompt_label, l, sizeof a->prompt_label);
+    vfp_flush_keys();
+}
+
+static void site_delete(vf_app *a)
+{
+    char name[VF_SITE_NAME];
+    int i;
+    vf_strlcpy(name, a->site_new.name, sizeof name);
+    sites_load(a);
+    if ((i = vf_sites_find(&a->sites, name)) < 0) { vf_set_msg(a, 1, "The site %s is not in the file now", name); return; }
+    vf_sites_remove(&a->sites, i);
+    if (!sites_save(a)) { sites_load(a); return; }
+    if (a->site_cur >= a->sites.n) a->site_cur = a->sites.n ? a->sites.n - 1 : 0;
+    if (!vf_strcasecmp(a->site_name, name)) a->site_name[0] = '\0';
+    vf_set_msg(a, 0, "Deleted the site %s", name);
+}
+
+static void sites_key(vf_app *a, int key)
+{
+    int n = a->sites.n, page = a->scr.rows - 7;
+    if (page < 1) page = 1;
+    switch (key) {
+    case VK_UP: if (a->site_cur > 0) a->site_cur--; return;
+    case VK_DOWN: if (a->site_cur < n - 1) a->site_cur++; return;
+    case VK_PREV: a->site_cur -= page; if (a->site_cur < 0) a->site_cur = 0; return;
+    case VK_NEXT: a->site_cur += page; if (a->site_cur >= n) a->site_cur = n ? n - 1 : 0; return;
+    case VK_RETURN: case VK_SELECT: case VK_DO: case VK_ENTER:
+        if (n) site_use(a, &a->sites.s[a->site_cur]);
+        return;
+    case 'a': case 'A': site_add_start(a); return;
+    case 'd': case 'D': case VK_REMOVE: site_delete_start(a); return;
+    case VK_F10: case VK_CTRL_Z: case 'l': case 'L': a->mode = M_MAIN; return;
+    default: return;
+    }
 }
 
 /* ---------- prompts and keys ---------- */
@@ -1322,6 +1535,14 @@ static void ask_answer(vf_app *a, int key)
         return;
     case ASK_DELETE:
         if (yes) run_delete(a); else vf_set_msg(a, 0, "Not deleted: nothing was changed");
+        return;
+    case ASK_SITE_REPLACE:
+        a->mode = M_SITES;
+        if (yes) site_store(a); else vf_set_msg(a, 0, "Not saved: the site is as it was");
+        return;
+    case ASK_SITE_DELETE:
+        a->mode = M_SITES;
+        if (yes) site_delete(a); else vf_set_msg(a, 0, "Not deleted");
         return;
     case ASK_REPLACE:
         if (yes) run_transfer(a);
@@ -1363,6 +1584,7 @@ static void prompt_key(vf_app *a, int key)
     case P_RENAME: rename_done(a, text); return;
     case P_MKDIR: mkdir_done(a, text); return;
     case P_JUMP: jump(a, text); return;
+    case P_SITE: site_add_done(a, text); return;
     default: return;
     }
 }
@@ -1437,6 +1659,7 @@ static void main_key(vf_app *a, int key)
         return;
     case '*': start_prompt(a, P_TAG, "Tag the files named: ", "*"); return;
     case 'o': case 'O': form_open(a); return;
+    case 'l': case 'L': sites_open(a); return;
     case 'g': case 'G': transfer(a, 1); return;
     case 'p': case 'P': transfer(a, 0); return;
     case 'c': case 'C': transfer(a, a->act == PANE_REMOTE); return;
@@ -1501,6 +1724,7 @@ void vf_app_key(vf_app *a, int key)
     switch (a->mode) {
     case M_MAIN: main_key(a, key); break;
     case M_FORM: form_key(a, key); break;
+    case M_SITES: sites_key(a, key); break;
     default: text_key(a, key); break;
     }
 }

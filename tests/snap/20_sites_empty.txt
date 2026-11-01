@@ -1,0 +1,24 @@
+ VFTP  Saved sites   STUB$DKA0:[USERS.TEST]VFTP.SITES         25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Site              Proto User@host:port                Remote directory       │
+│                                                                              │
+│ No sites saved yet. Fill the Open form (O), then here press A.               │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ SITES  Return: the Open form, filled   Add the Open form's   Delete
+ COMMANDS  Up/Down choose   No password is ever saved   F10 back

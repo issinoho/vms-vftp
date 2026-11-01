@@ -236,7 +236,11 @@ static void draw_form(vf_app *a)
     int i, r = 2, lw = 18, vc = 2 + lw + 1, vw = s->cols - vc - 3;
     int ftp = !vf_strcasecmp(a->fcur == FF_PROTO ? a->fedit.buf : a->fv[FF_PROTO], "FTP");
     char stars[VF_FIELD];
-    draw_title(a, "Open a connection");
+    {
+        char t[VF_SITE_NAME + 40];
+        snprintf(t, sizeof t, a->site_name[0] ? "Open a connection: the site %s" : "Open a connection", a->site_name);
+        draw_title(a, t);
+    }
     vf_box(s, 1, 0, s->rows - 3, s->cols - 1);
     for (i = 0; i < FF_COUNT && r < s->rows - 6; i++, r++) {
         const char *v = i == a->fcur ? a->fedit.buf : a->fv[i];
@@ -272,6 +276,34 @@ static void draw_form(vf_app *a)
     menu_line(s, s->rows - 1, "COMMANDS", "Do or Enter: connect   F10 cancel   Help", VF_A_REV);
 }
 
+/* ---------- the Sites screen (D14) ---------- */
+
+static void draw_sites(vf_app *a)
+{
+    vf_screen *s = &a->scr;
+    int rows = s->rows - 6, i, w = s->cols - 4;
+    char t[VF_SPEC_MAX + 32], line[700], uhp[400];
+    snprintf(t, sizeof t, "Saved sites   %s", a->sites_file);
+    draw_title(a, t);
+    vf_box(s, 1, 0, s->rows - 3, s->cols - 1);
+    vf_put(s, 2, 2, "Site              Proto User@host:port                Remote directory", VF_A_BOLD, w);
+    if (!a->sites.n)
+        vf_put(s, 4, 2, "No sites saved yet. Fill the Open form (O), then here press A.", 0, w);
+    if (a->site_cur < a->site_top) a->site_top = a->site_cur;
+    if (a->site_cur >= a->site_top + rows) a->site_top = a->site_cur - rows + 1;
+    for (i = 0; i < rows && a->site_top + i < a->sites.n; i++) {
+        const vf_site *e = &a->sites.s[a->site_top + i];
+        int cur = a->site_top + i == a->site_cur;
+        snprintf(uhp, sizeof uhp, "%s%s%s%s%s", e->user, e->user[0] ? "@" : "", e->host,
+                 e->port[0] ? ":" : "", e->port);
+        snprintf(line, sizeof line, "%-17.17s %-5s %-29.29s %s", e->name, e->proto, uhp, e->remote);
+        if (cur) vf_fill(s, 3 + i, 2, w, ' ', VF_A_REV);
+        vf_put(s, 3 + i, 2, line, cur ? VF_A_REV : 0, w);
+    }
+    draw_bottom(a, "SITES", "Return: the Open form, filled   &Add the Open form's   &Delete",
+                "Up/Down choose   No password is ever saved   F10 back");
+}
+
 void vf_app_draw(vf_app *a)
 {
     vf_screen_clear(&a->scr);
@@ -281,6 +313,7 @@ void vf_app_draw(vf_app *a)
     case M_INFO: draw_text(a, "ATTRIBUTES", "", "Any key returns"); break;
     case M_CONFIRM: draw_text(a, "CONFIRM", "", ""); break;
     case M_FORM: draw_form(a); break;
+    case M_SITES: draw_sites(a); break;
     default: draw_main(a); break;
     }
 }

@@ -85,6 +85,9 @@ unsigned int vfp_append_line(const char *spec, const char *line);
 /* Append a line to VFTP's log (VFTP$LOG, default SYS$LOGIN:VFTP.LOG). Never a
    password. */
 void vfp_log(const char *line);
+/* A file in the login directory: vfp_login_file("VFTP.SITES") ->
+   "USER$ROOT:[IAIN]VFTP.SITES". */
+void vfp_login_file(const char *name, char *out, int size);
 /* A logical name's value (or environment variable), "" if none. */
 void vfp_getenv(const char *name, char *out, int size);
 

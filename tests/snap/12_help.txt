@@ -8,6 +8,7 @@
 │   J                            jump to a directory (a VMS spec or a path)    │
 │ CONNECTION                                                                   │
 │   O                            open (SFTP or FTP); GOLD O closes it          │
+│   L                            saved sites: open one, save the Open form's   │
 │ FILES                                                                        │
 │   G  Get                       download the tagged (or current) entries      │
 │   P  Put                       upload the tagged (or current) entries        │
@@ -18,7 +19,6 @@
 │   T, Space  Tag/untag          GOLD T all, GOLD U none, * by name (wildcard) │
 │   X  Transfer mode             AUTO, ASCII, BINARY                           │
 │   S  Sort   F, Find  Filter    GOLD V every version / highest only (local)   │
-│   GOLD W, Ctrl/W               read both panes again; redraw                 │
 └───────────────────────────────────────────────────────────────────── more ───┘
  HELP  Up/Down Prev/Next scroll
  COMMANDS  Any other key returns

@@ -356,6 +356,8 @@ void vfp_ssh_file(const char *name, char *out, int size)
 
 int vfp_exists(const char *spec) { return find(spec) != 0; }
 
+void vfp_login_file(const char *name, char *out, int size) { snprintf(out, (size_t) size, "%s%s", home, name); }
+
 unsigned int vfp_append_line(const char *spec, const char *line)
 {
     lfile *f = find(spec);
