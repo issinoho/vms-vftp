@@ -111,13 +111,21 @@ asks before a password goes without TLS (D10). Live on both nodes against their 
 FTP servers as VFTPTEST (N10), and against a Unix server, pyftpdlib on Linux (N11).
 FTPS (D12): explicit TLS, the certificate pinned on first use; live against
 pyftpdlib with TLS required (N13); the nodes refuse AUTH TLS and get plain FTP.
-Still to do: REST (the VMS servers have none, N8) and SITE CHMOD.
+Moved to Phase 3: REST (the VMS servers have none, N8; a resumed Get must append to
+a partial file, against D8's new version) with resume there, and SITE CHMOD with
+the attributes there (SFTP's setstat alike). MLSD is not used: neither VMS server
+has it and LIST is parsed for all three kinds (vf_ftpcore).
+
+Exit: signed off by the user, 2026-11-01.
 
 ## Phase 3: SCP and the rest
 
 SCP through libssh2 (transfers) with listing and management by remote shell
 commands (Unix servers only, as WinSCP's SCP mode does). Recursive transfers of
-directories, resume of an interrupted transfer, the sites file (D9), attributes.
+directories, resume of an interrupted transfer (SFTP by offset, FTP by REST where
+the server has it; how it fits D8 to be decided), the sites file (D9), attributes
+(changing them: SFTP setstat, FTP SITE CHMOD). From Phase 1: F5 as Copy, Backspace
+as up, and a password login by hand against a real server.
 
 ## Phase 4: kits and release
 
