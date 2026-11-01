@@ -109,7 +109,7 @@ Considered: CA checking (VMS systems rarely have a CA bundle set up, and test an
 internal servers use self-signed certificates); requiring TLS (no FTP to the
 nodes at all); implicit FTPS on port 990 (rare, and not in RFC 4217).
 
-## D13. Whole directories: the tree read first, then copied (2026-11-01, proposed)
+## D13. Whole directories: the tree read first, then copied (2026-11-01, accepted)
 
 Get and Put take tagged (or current) directories as well as files; Space tags a
 directory, `T` and `*` still tag files only. Before anything is copied VFTP reads
