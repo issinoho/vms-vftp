@@ -31,7 +31,7 @@ panes holds the statistics, transfer mode and connection state; during a
 transfer it shows the progress bar, rate and time left. At 132 columns the panes
 show full dates, protections or permissions, and owners.
 
-## Keys (accepted; `C`/F5 and Backspace are still to build)
+## Keys (accepted)
 
 | Key | Action |
 |---|---|

@@ -192,6 +192,7 @@ int vfp_key(int timeout)
     case SMG$K_TRM_NEXT_SCREEN: return VK_NEXT;
     case SMG$K_TRM_HELP: return VK_HELP;
     case SMG$K_TRM_DO: return VK_DO;
+    case SMG$K_TRM_F5: return VK_F5;
     case SMG$K_TRM_F10: return VK_F10;
     case SMG$K_TRM_ENTER: return VK_ENTER;
     case SMG$K_TRM_MINUS: return VK_KP_MINUS;

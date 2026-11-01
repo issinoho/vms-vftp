@@ -4,7 +4,7 @@
 │   Up/Down, Prev/Next Screen    move; GOLD Up/Down: first/last                │
 │   Tab                          the other pane (local / remote)               │
 │   Return, Select, Right        open the directory; on a file: View           │
-│   Left, -                      up one directory                              │
+│   Left, -, Backspace           up one directory                              │
 │   J                            jump to a directory (a VMS spec or a path)    │
 │ CONNECTION                                                                   │
 │   O                            open (SFTP or FTP); GOLD O closes it          │

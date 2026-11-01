@@ -1343,7 +1343,7 @@ static void help_build(vf_app *a)
     text_add(a, "  Up/Down, Prev/Next Screen    move; GOLD Up/Down: first/last");
     text_add(a, "  Tab                          the other pane (local / remote)");
     text_add(a, "  Return, Select, Right        open the directory; on a file: View");
-    text_add(a, "  Left, -                      up one directory");
+    text_add(a, "  Left, -, Backspace           up one directory");
     text_add(a, "  J                            jump to a directory (a VMS spec or a path)");
     text_add(a, "CONNECTION");
     text_add(a, "  O                            open (SFTP or FTP); GOLD O closes it");
@@ -1729,7 +1729,7 @@ static void main_key(vf_app *a, int key)
         if (e && !e->is_dir && !e->is_parent && !e->is_link && key != VK_RIGHT) view(a);
         else enter(a);
         return;
-    case VK_LEFT: case '-':
+    case VK_LEFT: case '-': case VK_DEL: case VK_CTRL_H:   /* Backspace sends one of the two */
         if (p->nvis && p->e[p->vis[0]].is_parent) { p->cur = 0; enter(a); }
         return;
     case ' ': case 't': case 'T':
@@ -1741,7 +1741,7 @@ static void main_key(vf_app *a, int key)
     case 'l': case 'L': sites_open(a); return;
     case 'g': case 'G': transfer(a, 1); return;
     case 'p': case 'P': transfer(a, 0); return;
-    case 'c': case 'C': transfer(a, a->act == PANE_REMOTE); return;
+    case 'c': case 'C': case VK_F5: transfer(a, a->act == PANE_REMOTE); return;
     case 'd': case 'D': case VK_REMOVE: delete_start(a); return;
     case 'r': case 'R':
         if (e && !e->is_parent && (a->act == PANE_LOCAL || a->rem)) start_prompt(a, P_RENAME, "New name: ", e->name);

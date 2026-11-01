@@ -308,6 +308,9 @@ static void test_manage(void)
     key(a, VK_LEFT);
     CHECKS(a->pane[PANE_REMOTE].dir, "/home/test");
     CHECKS(vf_pane_cur(&a->pane[PANE_REMOTE])->name, "new");
+    key(a, VK_RETURN); key(a, VK_DEL);          /* Backspace, as DEL */
+    CHECKS(a->pane[PANE_REMOTE].dir, "/home/test");
+    CHECKS(vf_pane_cur(&a->pane[PANE_REMOTE])->name, "new");
     key(a, 'D'); key(a, 'Y');                   /* an empty directory goes */
     CHECK(!stub_remote("/home/test/new", 0));
 
@@ -316,6 +319,9 @@ static void test_manage(void)
     key(a, 'R'); erase(a); type(a, "old-notes.txt"); key(a, VK_RETURN);
     CHECK(stub_remote("/home/test/old-notes.txt", &len) && len == 23);
     CHECKS(vf_pane_cur(&a->pane[PANE_REMOTE])->name, "old-notes.txt");
+    key(a, VK_F5);                              /* F5 from the server pane = Get */
+    CHECK(stub_local("STUB$DKA0:[USERS.TEST]OLD-NOTES.TXT", 0, 0, 0) != 0);
+    CHECK(strstr(a->msg, "Got 1 file") != 0);
 
     /* local: delete one version only, after a No */
     go(a, PANE_LOCAL, "NOTES.TXT;2");
@@ -331,6 +337,8 @@ static void test_manage(void)
     key(a, '-');
     CHECKS(a->pane[PANE_LOCAL].dir, "STUB$DKA0:[USERS.TEST]");
     CHECKS(vf_pane_cur(&a->pane[PANE_LOCAL])->name, "WORK.DIR;1");
+    key(a, VK_RETURN); key(a, VK_CTRL_H);       /* Backspace, as Ctrl/H */
+    CHECKS(a->pane[PANE_LOCAL].dir, "STUB$DKA0:[USERS.TEST]");
     key(a, 'J'); erase(a); type(a, "[.SSH]"); key(a, VK_RETURN);
     CHECKS(a->pane[PANE_LOCAL].dir, "STUB$DKA0:[USERS.TEST.SSH]");
     key(a, 'J'); erase(a); type(a, "[NOWHERE]"); key(a, VK_RETURN);
