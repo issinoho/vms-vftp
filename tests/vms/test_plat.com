@@ -9,10 +9,16 @@ $ if d .eqs. "" then goto clean_files
 $ set security/protection=o:rwed 'd'
 $ goto clean
 $ clean_files:
-$ if f$search("[.live...]*.*;*") .eqs. "" then goto cleaned
-$ delete/nolog [.live...]*.*;*
-$ if f$search("[.live...]*.*;*") .nes. "" then delete/nolog [.live...]*.*;*
-$ if f$search("[.live...]*.*;*") .nes. "" then delete/nolog [.live...]*.*;*
+$! one pass per level, as a directory goes once it is empty (the DIRS test's trees
+$! are four deep). A fixed count: F$SEARCH asked the same again goes on from its
+$! last answer instead of looking afresh, and stops too soon.
+$ i = 0
+$ clean_pass:
+$ define/user sys$output nl:
+$ define/user sys$error nl:
+$ delete [.live...]*.*;*
+$ i = i + 1
+$ if i .lt. 8 then goto clean_pass
 $ cleaned:
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES/NAMES=(AS_IS,SHORTENED)" -
          + "/INCLUDE=([.src.core],[.src.app],[.src.net],[.src.plat],[.src.plat.vms])"

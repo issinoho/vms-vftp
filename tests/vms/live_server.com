@@ -21,12 +21,24 @@ $ if p1 .eqs. "CHECK" then goto check
 $ create/directory 'remote'
 $! empty it: a run before may have left files and directories (SUBDIR)
 $ tree = remote - "]" + "...]"
+$! one pass per level (the DIRS test's tree is four deep), a fixed count: F$SEARCH
+$! asked the same again goes on from its last answer, and would stop too soon
 $ i = 0
 $ empty:
-$ if f$search(tree + "*.dir;*") .nes. "" then set security/protection=o:rwed 'tree'*.dir;*
-$ if f$search(remote + "*.*;*") .nes. "" then delete/nolog 'tree'*.*;*
+$ define/user sys$output nl:
+$ define/user sys$error nl:
+$ set security/protection=o:rwed 'tree'*.dir;*
+$ define/user sys$output nl:
+$ define/user sys$error nl:
+$ delete 'tree'*.*;*
 $ i = i + 1
-$ if i .lt. 3 .and. f$search(remote + "*.*;*") .nes. "" then goto empty
+$ if i .lt. 8 then goto empty
+$ if f$search(tree + "*.*;*") .nes. ""
+$ then
+$   write sys$output "LIVE: SETUP could not empty ''remote'"
+$   directory 'tree'
+$   exit 44
+$ endif
 $ create 'remote'r.txt
 A variable-length text file on the server.
 Its second line.

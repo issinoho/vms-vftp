@@ -251,3 +251,30 @@ after the other; all 13 checks on both:
   delete), over TLS.
 The nodes' own FTP servers refuse AUTH TLS (500): plain FTP with the D10 question,
 re-run after the TLS work on both nodes (live_ftp.sh, all 7 checks).
+
+## N14. Whole directories, both nodes, by SFTP and FTP (2026-11-01, tools/live_dirs.sh)
+
+VFTP puts `[.LIVE.DIRS]` (A.TXT;1 and ;2, `[.SUB]B.BIN` binary, `[.SUB.DEEP]C.TXT`,
+an empty `[.EMPTY]`) to a server on the same node twice, then gets the tree back
+into `[.LIVE.BACK]` (test_live.com DIRS). The server: the node's own sshd into
+`[.LIVE.REMOTE]` (key login), and its own FTP server as VFTPTEST (D11). All checks
+on x86 and IA64, both protocols:
+- Put: the four directories made (the empty one too), only A.TXT;2 sent, records the
+  same on the server (DIFFERENCES), C.TXT three levels down. Directory names go as
+  `dirs`, `sub`: both servers keep the lower case on ODS-5.
+- Put again: no replace question and no MKDIR (the directories are found, listed
+  `dirs.DIR;1` by either server); every file a new version (`a.txt;2`).
+- Get back: the directories made in `[.LIVE.BACK]` (`[.BACK.dirs.sub.deep]`), only
+  the highest of the two versions on the server (`a.txt;2` asked for by name, `;1`
+  made locally), text as the same records, B.BIN byte for byte (DIFFERENCES/HEX).
+- Over SFTP to VSI's server, a directory path works as `.../dirs` and as
+  `.../dirs.DIR;1` (the pane enters it that way); a file path takes its version
+  (`.../a.txt;2`).
+- Two things in the tests, not VFTP. DIFFERENCES takes the device and directory the
+  second file lacks from the first, so a relative spec found the wrong disk when
+  [VFTPTEST] is on another (x86). And F$SEARCH asked the same spec again goes on
+  from its last answer instead of looking afresh: the empty-out loops of
+  test_plat.com and live_server.com ("anything left? delete again") stopped after
+  two passes, leaving `dirs.DIR` in [VFTPTEST], which shifted the rows the FTP
+  test's key script counts (its R.TXT check failed). They now make a fixed eight
+  passes (one per level), and live_server.com stops if anything is left.

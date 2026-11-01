@@ -127,6 +127,10 @@ the server has it; how it fits D8 to be decided), the sites file (D9), attribute
 (changing them: SFTP setstat, FTP SITE CHMOD). From Phase 1: F5 as Copy, Backspace
 as up, and a password login by hand against a real server.
 
+Status 2026-11-01: whole directories (D13): Get and Put take directories, the tree
+read first so the replace screen names every file at any depth; live on both nodes
+by SFTP and by FTP (N14).
+
 ## Phase 4: kits and release
 
 vms-libssh2 released first (its own kit, for other ports too); VFTP links it

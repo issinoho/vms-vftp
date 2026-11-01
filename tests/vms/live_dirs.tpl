@@ -1,0 +1,33 @@
+# PTYDRIVE script for test_live.com DIRS over SFTP: whole directories (D13) to this
+# node's own sshd (tools/live_dirs.sh fills in @PORT@ and @RDIR@, [.LIVE.REMOTE]),
+# logged in with the test key. "<secs> <label> | <keys>". PTYDRIVE knows \r \e \\
+# \xHH only: Tab is \x09. In [.LIVE] the order is [-], BACK, DIRS, REMOTE, SSH;
+# on the server .., then the directory put.
+2 dcl | set terminal/width=80/page=24\r
+8 start | vftp\r
+2 host | \x05\x15localhost
+2 to port | \e[B
+2 port | \x05\x15@PORT@
+2 to dir | \e[B\e[B\e[B\e[B\e[B
+2 rdir | \x05\x15@RDIR@
+10 connect | \e[29~
+8 trust | y
+2 to local | \x09
+2 local top | \eOP\e[A
+2 local dirs | \e[B\e[B
+8 put dirs | p
+8 put dirs again | p
+2 to remote | \x09
+2 remote top | \eOP\e[A
+2 remote dirs | \e[B
+4 enter remote dirs | \r
+4 leave remote dirs | \e[D
+2 remote top again | \eOP\e[A
+2 remote dirs again | \e[B
+2 to local again | \x09
+2 local jump | j
+3 local back | \x05\x15[.BACK]\r
+2 to remote last | \x09
+8 get dirs | g
+3 exit | \e[21~
+2 logout check | show default\r
