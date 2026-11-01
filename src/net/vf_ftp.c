@@ -3,9 +3,12 @@
    connection's host), text in TYPE A and bytes in TYPE I. The protocol's text is
    src/core/vf_ftpcore.c. What a VMS server does is NOTES N8: paths are VMS specs,
    names go in commands unescaped, DELE needs the version, RMD takes the bare
-   directory name, nothing is ever replaced. No TLS yet: vf_remote.secure is 0 and
-   the app asks before a password goes (D10). Blocking, with a time limit on each
-   wait. */
+   directory name, nothing is ever replaced. FTPS (explicit, D12): AUTH TLS when
+   the server takes it, the certificate checked against VFTP's known_tls file
+   (trusted on first use, as SSH host keys), then PROT P so the data connections
+   are TLS too; a server that refuses AUTH gets plain FTP and the app asks before a
+   password goes (D10). OpenSSL is VSI's SSL3 kit on VMS. Blocking, with a time
+   limit on each wait. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +18,10 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/x509.h>
+#include <openssl/evp.h>
 #include "vf_rimpl.h"
 #include "vf_ftpcore.h"
 #include "vf_platform.h"
@@ -22,9 +29,16 @@
 
 #define WAIT_SECS 60
 
+/* a connection: a socket, and TLS on it once AUTH TLS (control) or PROT P (data) */
+typedef struct { int fd; SSL *ssl; } conn;
+
 typedef struct {
     vf_remote base;          /* first: a vf_remote * is one of these */
-    int fd;
+    conn c;                  /* the control connection */
+    SSL_CTX *ctx;            /* 0 until AUTH TLS */
+    SSL_SESSION *sess;       /* the control connection's, for the data connections */
+    int prot;                /* PROT P: data connections in TLS */
+    int port;
     char host[256];
     char buf[8192];          /* control connection input not yet read as lines */
     int blen;
@@ -38,7 +52,7 @@ typedef struct {
 typedef struct {
     vfr_file base;
     ftp_remote *r;
-    int dfd;
+    conn d;
     int text, writing;
     int cr;                  /* a CR at the end of the last read, not yet given out */
 } ftp_file;
@@ -62,16 +76,68 @@ static unsigned int fail_rep(ftp_remote *r, const char *what)
     return failf(r, "%s%s%s", what, *what ? ": " : "", m[0] ? m : "no answer");
 }
 
-/* wait for fd to be readable: 1, or 0 after WAIT_SECS */
-static int wait_in(int fd)
+/* ---------- connections, plain or TLS ---------- */
+
+/* wait for input: 1, or 0 after WAIT_SECS (TLS may hold some already) */
+static int c_wait(conn *c)
 {
     fd_set rd;
     struct timeval tv;
+    if (c->ssl && SSL_pending(c->ssl) > 0) return 1;
     FD_ZERO(&rd);
-    FD_SET(fd, &rd);
+    FD_SET(c->fd, &rd);
     tv.tv_sec = WAIT_SECS;
     tv.tv_usec = 0;
-    return select(fd + 1, &rd, 0, 0, &tv) > 0;
+    return select(c->fd + 1, &rd, 0, 0, &tv) > 0;
+}
+
+/* up to n bytes: how many, 0 at the end, -1 on an error */
+static int c_recv(conn *c, char *b, int n)
+{
+    if (c->ssl) {
+        int k = SSL_read(c->ssl, b, n), e;
+        if (k > 0) return k;
+        e = SSL_get_error(c->ssl, k);
+        /* the end: close_notify, or a server that just closes (many do on data) */
+        if (e == SSL_ERROR_ZERO_RETURN || (e == SSL_ERROR_SYSCALL && ERR_peek_error() == 0)) return 0;
+        return -1;
+    }
+    return (int) recv(c->fd, b, (size_t) n, 0);
+}
+
+static int c_send_all(conn *c, const char *b, int len)
+{
+    while (len > 0) {
+        int n = c->ssl ? SSL_write(c->ssl, b, len) : (int) send(c->fd, b, (size_t) len, 0);
+        if (n <= 0) return 0;
+        b += n; len -= n;
+    }
+    return 1;
+}
+
+/* close_notify first: a server knows from it that an upload is whole */
+static void c_close(conn *c)
+{
+    if (c->ssl) { SSL_shutdown(c->ssl); SSL_free(c->ssl); c->ssl = 0; }
+    if (c->fd >= 0) close(c->fd);
+    c->fd = -1;
+}
+
+/* TLS on a connected socket: 1, or 0 and err says why */
+static int c_tls(ftp_remote *r, conn *c, int data, char *err, int errsz)
+{
+    unsigned long e;
+    c->ssl = SSL_new(r->ctx);
+    if (!c->ssl) { snprintf(err, (size_t) errsz, "TLS: no memory"); return 0; }
+    SSL_set_fd(c->ssl, c->fd);
+    if (data && r->sess) SSL_set_session(c->ssl, r->sess);     /* servers may require reuse */
+    if (!data) SSL_set_tlsext_host_name(c->ssl, r->host);
+    if (SSL_connect(c->ssl) == 1) return 1;
+    e = ERR_get_error();
+    snprintf(err, (size_t) errsz, "TLS: %s", e ? ERR_reason_error_string(e) : "the handshake failed");
+    SSL_free(c->ssl);
+    c->ssl = 0;
+    return 0;
 }
 
 /* one line from the control connection, CRLF taken off: 1, or 0 if it closed */
@@ -91,8 +157,8 @@ static int read_line(ftp_remote *r, char *line, int size)
             return 1;
         }
         if (r->blen == (int) sizeof r->buf) r->blen = 0;       /* a line too long: dropped */
-        if (!wait_in(r->fd)) return 0;
-        n = (int) recv(r->fd, r->buf + r->blen, sizeof r->buf - (size_t) r->blen, 0);
+        if (!c_wait(&r->c)) return 0;
+        n = c_recv(&r->c, r->buf + r->blen, (int) (sizeof r->buf - (size_t) r->blen));
         if (n <= 0) return 0;
         r->blen += n;
     }
@@ -110,16 +176,6 @@ static int reply(ftp_remote *r)
     return 0;
 }
 
-static int send_all(int fd, const char *b, int len)
-{
-    while (len > 0) {
-        int n = (int) send(fd, b, (size_t) len, 0);
-        if (n <= 0) return 0;
-        b += n; len -= n;
-    }
-    return 1;
-}
-
 /* send a command, read its reply: the code (0 if the connection is gone) */
 static int cmd(ftp_remote *r, const char *fmt, ...)
 {
@@ -131,7 +187,7 @@ static int cmd(ftp_remote *r, const char *fmt, ...)
     va_end(ap);
     if (n < 0 || n > (int) sizeof line - 3) n = (int) sizeof line - 3;
     line[n++] = '\r'; line[n++] = '\n';
-    if (!send_all(r->fd, line, n)) {
+    if (!c_send_all(&r->c, line, n)) {
         vf_strlcpy(r->rep.text, "the connection was lost", sizeof r->rep.text);
         return r->rep.code = 0;
     }
@@ -180,39 +236,53 @@ static unsigned int set_type(ftp_remote *r, int t)
 }
 
 /* a passive data connection: the socket, or -1 */
-static int data_conn(ftp_remote *r)
+/* a passive data connection, connected (no TLS yet): 1, or 0 */
+static int data_conn(ftp_remote *r, conn *d)
 {
     char host[64], err[200];
-    int port = 0, fd;
+    int port = 0;
+    d->fd = -1; d->ssl = 0;
     if (!r->no_epsv) {
         if (cmd(r, "EPSV") == 229 && vf_ftp_epsv(r->rep.text, &port)) goto dial;
-        if (!r->rep.code) { fail_rep(r, "EPSV"); return -1; }
+        if (!r->rep.code) { fail_rep(r, "EPSV"); return 0; }
         r->no_epsv = 1;
     }
     if (cmd(r, "PASV") != 227 || !vf_ftp_pasv(r->rep.text, host, sizeof host, &port)) {
         fail_rep(r, "PASV");
-        return -1;
+        return 0;
     }
 dial:
     /* the control connection's host, not PASV's address: it may be one we cannot reach */
-    fd = vfr_dial(r->host, port, err, sizeof err);
-    if (fd < 0) failf(r, "data connection: %s", err);
-    return fd;
+    d->fd = vfr_dial(r->host, port, err, sizeof err);
+    if (d->fd < 0) { failf(r, "data connection: %s", err); return 0; }
+    return 1;
 }
 
-/* open a data connection and start a transfer command; the data socket or -1 */
-static int start(ftp_remote *r, int type, const char *fmt, const char *arg)
+/* open a data connection and start a transfer command on it: 1, or 0 */
+static int start(ftp_remote *r, conn *d, int type, const char *fmt, const char *arg)
 {
-    int fd, code;
-    if (!(set_type(r, type) & 1)) return -1;
-    if ((fd = data_conn(r)) < 0) return -1;
+    int code;
+    char err[200];
+    if (!(set_type(r, type) & 1)) return 0;
+    if (r->prot && r->c.ssl) {
+        /* the control connection's session, which some servers insist on reusing */
+        if (r->sess) SSL_SESSION_free(r->sess);
+        r->sess = SSL_get1_session(r->c.ssl);
+    }
+    if (!data_conn(r, d)) return 0;
     code = cmd(r, fmt, arg);
     if (code != 150 && code != 125) {
-        close(fd);
+        c_close(d);
         fail_rep(r, arg);
-        return -1;
+        return 0;
     }
-    return fd;
+    if (r->prot && !c_tls(r, d, 1, err, sizeof err)) {
+        c_close(d);
+        reply(r);                                   /* the server's 425/426 for it */
+        failf(r, "data connection: %s", err);
+        return 0;
+    }
+    return 1;
 }
 
 /* after the data connection is closed: the transfer's own end (226) */
@@ -220,6 +290,89 @@ static unsigned int finish(ftp_remote *r, const char *what)
 {
     int code = reply(r);
     return code / 100 == 2 ? 1 : fail_rep(r, what);
+}
+
+/* ---------- the server's certificate (D12) ---------- */
+
+/* "AB:CD:...", the SHA-256 of the certificate, as openssl x509 -fingerprint shows it */
+static void cert_fp(X509 *x, char *out, size_t size)
+{
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int n = 0, i;
+    size_t o = 0;
+    out[0] = '\0';
+    if (!X509_digest(x, EVP_sha256(), md, &n)) return;
+    for (i = 0; i < n && o + 4 < size; i++) o += (size_t) snprintf(out + o, size - o, "%s%02X", i ? ":" : "", md[i]);
+}
+
+/* the name a server goes by in known_tls: "host", or "[host]:port" off port 21 */
+static void tls_name(ftp_remote *r, char *out, size_t size)
+{
+    if (r->port == 21) vf_strlcpy(out, r->host, size);
+    else snprintf(out, size, "[%s]:%d", r->host, r->port);
+}
+
+/* known_tls: "name SHA256-fingerprint" lines */
+static int tls_known(const char *file, const char *name, const char *fp)
+{
+    char line[512];
+    int seen = 0;
+    FILE *f = fopen(file, "r");
+    if (!f) return VFR_HK_NOFILE;
+    while (fgets(line, sizeof line, f)) {
+        char *sp;
+        line[strcspn(line, "\r\n")] = '\0';
+        sp = strchr(line, ' ');
+        if (!sp) continue;
+        *sp = '\0';
+        if (strcmp(line, name)) continue;
+        if (!strcmp(sp + 1, fp)) { fclose(f); return VFR_HK_MATCH; }
+        seen = 1;
+    }
+    fclose(f);
+    return seen ? VFR_HK_MISMATCH : VFR_HK_NOTFOUND;
+}
+
+/* AUTH TLS: 1 with TLS on (or the server refused AUTH: plain), 0 if TLS failed */
+static int auth_tls(ftp_remote *r, vfr_hostkey *hk, char *err, int errsz)
+{
+    X509 *x;
+    char name[300];
+    int code = cmd(r, "AUTH TLS");
+    hk->known = VFR_HK_MATCH;                     /* plain FTP: nothing to check */
+    if (code != 234) return 1;                    /* 500, 502, 504, 534: plain (both nodes, N8) */
+    r->ctx = SSL_CTX_new(TLS_client_method());
+    if (!r->ctx) { snprintf(err, (size_t) errsz, "TLS: no memory"); return 0; }
+    SSL_CTX_set_min_proto_version(r->ctx, TLS1_2_VERSION);
+    SSL_CTX_set_session_cache_mode(r->ctx, SSL_SESS_CACHE_CLIENT);
+    /* no CA check: the certificate is pinned on first use, as SSH host keys (D12) */
+    SSL_CTX_set_verify(r->ctx, SSL_VERIFY_NONE, 0);
+    if (!c_tls(r, &r->c, 0, err, errsz)) return 0;
+    r->base.secure = 1;
+    x = SSL_get1_peer_certificate(r->c.ssl);
+    if (!x) { snprintf(err, (size_t) errsz, "TLS: the server sent no certificate"); return 0; }
+    vf_strlcpy(hk->type, "TLS certificate", sizeof hk->type);
+    cert_fp(x, hk->fingerprint, sizeof hk->fingerprint);
+    {
+        char subj[128], iss[128], when[64];
+        const ASN1_TIME *until = X509_get0_notAfter(x);
+        BIO *b = BIO_new(BIO_s_mem());
+        when[0] = '\0';
+        X509_NAME_oneline(X509_get_subject_name(x), subj, sizeof subj);
+        X509_NAME_oneline(X509_get_issuer_name(x), iss, sizeof iss);
+        if (b && until && ASN1_TIME_print(b, until) > 0) {
+            int n = BIO_read(b, when, (int) sizeof when - 1);
+            when[n > 0 ? n : 0] = '\0';
+        }
+        if (b) BIO_free(b);
+        snprintf(hk->about, sizeof hk->about, "%s, issued by %s, valid until %s",
+                 subj, !strcmp(subj, iss) ? "itself" : iss, when);
+    }
+    X509_free(x);
+    vfp_ssh_file("vftp_known_tls", hk->file, sizeof hk->file);
+    tls_name(r, name, sizeof name);
+    hk->known = tls_known(hk->file, name, hk->fingerprint);
+    return 1;
 }
 
 /* ---------- connect and log in ---------- */
@@ -231,28 +384,51 @@ unsigned int vfr_ftp_connect(const char *host, int port, vf_remote **out, vfr_ho
     int code;
     *out = 0;
     memset(hk, 0, sizeof *hk);
-    hk->known = VFR_HK_MATCH;                    /* FTP has no host key to check */
     r = (ftp_remote *) calloc(1, sizeof *r);
     if (!r) { snprintf(err, (size_t) errsz, "no memory"); return VFR_FAIL; }
     r->base.ops = &ops;
+    r->port = port;
     vf_strlcpy(r->host, host, sizeof r->host);
-    r->fd = vfr_dial(host, port, err, errsz);
-    if (r->fd < 0) { free(r); return VFR_FAIL; }
+    r->c.fd = vfr_dial(host, port, err, errsz);
+    if (r->c.fd < 0) { free(r); return VFR_FAIL; }
     while ((code = reply(r)) == 120) ;           /* "ready in a moment" */
     if (code != 220) {
         char m[256];
         vf_ftp_reply_msg(&r->rep, m, sizeof m);
         snprintf(err, (size_t) errsz, "%s", code ? m : "no FTP greeting");
-        close(r->fd);
+        c_close(&r->c);
         free(r);
         return VFR_FAIL;
     }
     snprintf(r->base.banner, sizeof r->base.banner, "220 %.*s", (int) strcspn(r->rep.text, "\n"), r->rep.text);
+    if (!auth_tls(r, hk, err, errsz)) {
+        /* a server that took AUTH TLS and then failed it: nothing more on this connection */
+        c_close(&r->c);
+        if (r->ctx) SSL_CTX_free(r->ctx);
+        free(r);
+        return VFR_FAIL;
+    }
     *out = &r->base;
     return 1;
 }
 
-static unsigned int ftp_trust(vf_remote *rr) { (void) rr; return 1; }
+/* add the certificate to known_tls (the user said Y) */
+static unsigned int ftp_trust(vf_remote *rr)
+{
+    ftp_remote *r = (ftp_remote *) rr;
+    X509 *x;
+    char file[256], name[300], fp[128], line[512];
+    if (!r->c.ssl) return 1;
+    x = SSL_get1_peer_certificate(r->c.ssl);
+    if (!x) return failf(r, "no certificate");
+    cert_fp(x, fp, sizeof fp);
+    X509_free(x);
+    tls_name(r, name, sizeof name);
+    snprintf(line, sizeof line, "%s %s", name, fp);
+    vfp_ssh_file("vftp_known_tls", file, sizeof file);
+    if (!(vfp_append_line(file, line) & 1)) return failf(r, "%s could not be written", file);
+    return 1;
+}
 
 static unsigned int ftp_methods(vf_remote *rr, const char *user, char *out, int size)
 {
@@ -270,6 +446,12 @@ static unsigned int ftp_login_password(vf_remote *rr, const char *user, const ch
     if (code != 230 && code != 202) {
         fail_rep(r, "");
         return code / 100 == 5 ? VFR_AUTH : VFR_FAIL;
+    }
+    /* TLS on the control connection: the data connections too (RFC 4217) */
+    if (r->c.ssl) {
+        if (cmd(r, "PBSZ 0") / 100 != 2) return fail_rep(r, "PBSZ");
+        if (cmd(r, "PROT P") / 100 != 2) return fail_rep(r, "PROT P");
+        r->prot = 1;
     }
     /* a VMS server: SYST says so, and PWD gives a VMS spec (N8) */
     cmd(r, "SYST");
@@ -316,10 +498,11 @@ static unsigned int ftp_list(vf_remote *rr, const char *dir, vfr_entry_cb cb, vo
     vf_entry e;
     vf_when now;
     char data[16384], line[1024];
-    int fd, have = 0, stop = 0, n;
+    conn d;
+    int have = 0, stop = 0, n;
     if (!(go(r, dir) & 1)) return VFR_FAIL;
     vf_strlcpy(r->listed, dir, sizeof r->listed);
-    if ((fd = start(r, 'A', "LIST", "")) < 0) {
+    if (!start(r, &d, 'A', "LIST", "")) {
         /* a VMS server answers 550 to a listing of nothing; LIST gives "Total of 0" */
         return VFR_FAIL;
     }
@@ -338,8 +521,8 @@ static unsigned int ftp_list(vf_remote *rr, const char *dir, vfr_entry_cb cb, vo
             while (!stop && vf_ftp_list_more(&l, &e)) stop = cb(ctx, &e);
         }
         if (have == (int) sizeof data) have = 0;
-        if (!wait_in(fd)) { close(fd); reply(r); return failf(r, "LIST: the server stopped sending"); }
-        n = (int) recv(fd, data + have, sizeof data - (size_t) have, 0);
+        if (!c_wait(&d)) { c_close(&d); reply(r); return failf(r, "LIST: the server stopped sending"); }
+        n = c_recv(&d, data + have, (int) (sizeof data - (size_t) have));
         if (n <= 0) break;
         have += n;
     }
@@ -348,7 +531,7 @@ static unsigned int ftp_list(vf_remote *rr, const char *dir, vfr_entry_cb cb, vo
         if (vf_ftp_list_line(&l, data, &e)) stop = cb(ctx, &e);
     }
     if (!stop && vf_ftp_list_end(&l, &e)) stop = cb(ctx, &e);
-    close(fd);
+    c_close(&d);
     if (!(finish(r, "LIST") & 1)) return VFR_FAIL;
     return stop ? VFP_STOPPED : 1;
 }
@@ -358,11 +541,11 @@ static unsigned int ftp_stat(vf_remote *rr, const char *path, vf_entry *e)
     ftp_remote *r = (ftp_remote *) rr;
     char dir[VF_SPEC_MAX], name[256];
     vf_entry found;
-    int fd;
+    conn d;
     split(r, path, dir, sizeof dir, name, sizeof name);
     memset(&found, 0, sizeof found);
     if (!(go(r, dir) & 1)) return VFR_FAIL;
-    if ((fd = start(r, 'A', "LIST %s", name)) < 0) return VFR_FAIL;
+    if (!start(r, &d, 'A', "LIST %s", name)) return VFR_FAIL;
     {
         /* the first entry of "LIST name" */
         vf_ftp_list l;
@@ -371,7 +554,7 @@ static unsigned int ftp_stat(vf_remote *rr, const char *path, vf_entry *e)
         vf_when now;
         vfp_now(&now);
         vf_ftp_list_init(&l, now.y, now.m);
-        while (wait_in(fd) && (n = (int) recv(fd, data + have, sizeof data - 1 - (size_t) have, 0)) > 0) {
+        while (c_wait(&d) && (n = c_recv(&d, data + have, (int) (sizeof data - 1 - (size_t) have))) > 0) {
             have += n;
             if (have >= (int) sizeof data - 1) break;
         }
@@ -388,7 +571,7 @@ static unsigned int ftp_stat(vf_remote *rr, const char *path, vf_entry *e)
             if (!found.name[0]) vf_ftp_list_end(&l, &found);
         }
     }
-    close(fd);
+    c_close(&d);
     finish(r, "LIST");
     if (!found.name[0]) return failf(r, "%s: no such file", path);
     *e = found;
@@ -489,13 +672,13 @@ static unsigned int open_file(vf_remote *rr, const char *path, int text, int wri
     ftp_remote *r = (ftp_remote *) rr;
     char dir[VF_SPEC_MAX], name[256];
     ftp_file *f;
-    int fd;
+    conn d;
     split(r, path, dir, sizeof dir, name, sizeof name);
     if (!(go(r, dir) & 1)) return VFR_FAIL;
-    if ((fd = start(r, text ? 'A' : 'I', writing ? "STOR %s" : "RETR %s", name)) < 0) return VFR_FAIL;
+    if (!start(r, &d, text ? 'A' : 'I', writing ? "STOR %s" : "RETR %s", name)) return VFR_FAIL;
     f = (ftp_file *) calloc(1, sizeof *f);
-    if (!f) { close(fd); reply(r); return failf(r, "no memory"); }
-    f->base.r = rr; f->r = r; f->dfd = fd; f->text = text; f->writing = writing;
+    if (!f) { c_close(&d); reply(r); return failf(r, "no memory"); }
+    f->base.r = rr; f->r = r; f->d = d; f->text = text; f->writing = writing;
     *out = &f->base;
     return 1;
 }
@@ -518,8 +701,8 @@ static unsigned int ftp_read(vfr_file *ff, char *buf, int size, int *got)
     int n, i, o = 0;
     *got = 0;
     if (size > (int) sizeof tmp) size = (int) sizeof tmp;
-    if (!wait_in(f->dfd)) return failf(f->r, "the server stopped sending");
-    n = (int) recv(f->dfd, f->text ? tmp : buf, (size_t) (f->text ? size - 1 : size), 0);
+    if (!c_wait(&f->d)) return failf(f->r, "the server stopped sending");
+    n = c_recv(&f->d, f->text ? tmp : buf, f->text ? size - 1 : size);
     if (n < 0) return failf(f->r, "the data connection failed");
     if (!f->text) { *got = n; return 1; }
     if (n == 0) {                                 /* the end: a CR left over */
@@ -548,16 +731,16 @@ static unsigned int ftp_write(vfr_file *ff, const char *buf, int len)
     ftp_file *f = (ftp_file *) ff;
     char out[4096];
     int i, o = 0;
-    if (!f->text) return send_all(f->dfd, buf, len) ? 1 : failf(f->r, "the data connection failed");
+    if (!f->text) return c_send_all(&f->d, buf, len) ? 1 : failf(f->r, "the data connection failed");
     for (i = 0; i < len; i++) {
         if (o + 2 > (int) sizeof out) {
-            if (!send_all(f->dfd, out, o)) return failf(f->r, "the data connection failed");
+            if (!c_send_all(&f->d, out, o)) return failf(f->r, "the data connection failed");
             o = 0;
         }
         if (buf[i] == '\n' && !(i > 0 && buf[i - 1] == '\r')) out[o++] = '\r';
         out[o++] = buf[i];
     }
-    return o && !send_all(f->dfd, out, o) ? failf(f->r, "the data connection failed") : 1;
+    return o && !c_send_all(&f->d, out, o) ? failf(f->r, "the data connection failed") : 1;
 }
 
 static unsigned int ftp_close(vfr_file *ff)
@@ -565,7 +748,7 @@ static unsigned int ftp_close(vfr_file *ff)
     ftp_file *f = (ftp_file *) ff;
     ftp_remote *r = f->r;
     int writing = f->writing;
-    close(f->dfd);
+    c_close(&f->d);
     free(f);
     /* a Get stopped early: the server may say 426 or 451; that is the cancel, not news */
     return finish(r, writing ? "STOR" : "RETR");
@@ -580,10 +763,12 @@ static void ftp_disconnect(vf_remote *rr)
 {
     ftp_remote *r = (ftp_remote *) rr;
     if (!r) return;
-    if (r->fd >= 0) {
+    if (r->c.fd >= 0) {
         cmd(r, "QUIT");
-        close(r->fd);
+        c_close(&r->c);
     }
+    if (r->sess) SSL_SESSION_free(r->sess);
+    if (r->ctx) SSL_CTX_free(r->ctx);
     free(r);
 }
 

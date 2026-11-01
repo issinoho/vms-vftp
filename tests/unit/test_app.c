@@ -146,6 +146,23 @@ static void test_ftp_login(void)
     erase(a); type(a, "FTP"); key(a, VK_DOWN);
     CHECKS(a->fv[FF_PORT], "2222");
     key(a, VK_F10);
+
+    /* FTPS (D12): the certificate is asked about first, as an SSH key; then no
+       question about the password, which goes over TLS */
+    start(24, 80, 0);
+    stub_ftps(1);
+    key(a, VK_UP); erase(a); type(a, "FTP"); key(a, VK_DOWN);
+    erase(a); type(a, "test.example");
+    key(a, VK_DOWN); key(a, VK_DOWN); key(a, VK_DOWN);
+    type(a, "secret");
+    key(a, VK_DO);
+    CHECK(a->mode == M_CONFIRM && a->ask == ASK_HOSTKEY);
+    snap(a, "18_ftps_certificate");
+    key(a, 'Y');
+    CHECK(a->mode == M_MAIN && a->rem && a->proto == VFR_FTP);
+    CHECK(!strstr(stub_log(), "CLEAR PASSWORD"));
+    CHECK(strstr(stub_log(), "LOGIN test@test.example:21 by password") != 0);
+    stub_ftps(0);
 }
 
 static void test_get_put(void)

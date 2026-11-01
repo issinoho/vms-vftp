@@ -16,6 +16,10 @@ $ if ssh2 .eqs. "" then goto no_ssh2
 $ ssh2inc = ssh2 - "]" + ".INCLUDE]"
 $ ssh2opt = ssh2 - "]" + ".LIB]LIBSSH2.OPT"
 $ if f$search(ssh2opt) .eqs. "" then goto no_ssh2
+$! FTPS (vf_ftp.c) uses SSL3's libssl too; <openssl/ssl.h> through OPENSSL, as
+$! vms-libssh2 does. libcrypto comes with libssh2's options file.
+$ if f$trnlnm("SSL3$INCLUDE") .eqs. "" then goto no_ssl
+$ define/process/nolog OPENSSL SSL3$INCLUDE:
 $! libssh2's API is mixed case, some names longer than 31: every module is
 $! compiled /NAMES=(AS_IS,SHORTENED) so that they all agree.
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES" -
@@ -52,7 +56,10 @@ $ if $severity .ne. 1 then goto failed
 $ cc'cflags'/object=[.build]vf_main.obj [.src.plat.vms]vf_main.c
 $ if $severity .ne. 1 then goto failed
 $ set default [.build]
-$ link/executable=vftp.exe vf_main.obj,vf_plat_vms.obj,vf_remote.obj,vf_sftp.obj,vf_ftp.obj,'core','app','ssh2opt'/options
+$ open/write o ssl.opt
+$ write o "SYS$SHARE:SSL3$LIBSSL_SHR32/SHAREABLE"
+$ close o
+$ link/executable=vftp.exe vf_main.obj,vf_plat_vms.obj,vf_remote.obj,vf_sftp.obj,vf_ftp.obj,'core','app','ssh2opt'/options,SYS$DISK:[]ssl.opt/options
 $ s = $severity
 $ set default [-]
 $! an undefined symbol is only a warning on VMS (VTREE CLAUDE.md)
@@ -86,6 +93,9 @@ $ run [.build]test_app
 $ if .not. $status then goto failed
 $ write sys$output "TEST-OK"
 $ exit 1
+$ no_ssl:
+$ write sys$output "build: VSI's SSL3 kit (SSL3$INCLUDE) is not installed"
+$ goto failed
 $ no_ssh2:
 $ write sys$output "build: no libssh2 install tree (P2 or VFTP_LIBSSH2): build vms-libssh2 first"
 $ goto failed

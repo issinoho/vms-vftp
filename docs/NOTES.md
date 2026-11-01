@@ -220,3 +220,17 @@ paths. LIST is ls -l lines, as test_ftp.c has them. All ten checks on both nodes
 - r.bin byte for byte (TYPE I), r.txt as records (TYPE A); U.TXT as LF lines;
   MKD, CWD in and out, rename (SIZE first: 550, so no file is in the way), DELE.
 - pyftpdlib logs `PASS ******`; the password is in no output.
+
+## N12. Two runs on one node at once (2026-11-01)
+
+A plain FTP run on x86 (tools/live_ftp.sh) started while the user's FTPS run
+(live_unix_ftp.sh x86 --tls) was building there. Each build clears [.BUILD], so
+VFTP.EXE was not there when the first run typed "vftp"; PTYDRIVE then typed the
+whole key script at the DCL prompt, which echoed it, the test password too, into
+the saved output (out/, git-ignored; masked; the harness's "password in no output"
+check caught it). And editing live_unix_ftp.sh while it ran made bash read it at a
+shifted offset ("line 59: dev/null: No such file"), start a second server, stop,
+and leave the first one running. Now: tools/node_lock.sh, taken by build.sh and
+every live script, allows one run per node (a second stops at once, saying so);
+test_live.com types nothing if VFTP.EXE is missing; and a script is not edited
+while it runs.

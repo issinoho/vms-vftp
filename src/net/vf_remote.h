@@ -12,14 +12,17 @@
 
 enum { VFR_SFTP = 1, VFR_FTP };
 
-/* What known_hosts says about the server's key (D7). */
+/* What known_hosts says about the server's key (D7), or known_tls about an FTPS
+   server's certificate (D12). */
 enum { VFR_HK_MATCH = 1, VFR_HK_NOTFOUND, VFR_HK_MISMATCH, VFR_HK_NOFILE };
 
 typedef struct {
-    char type[32];           /* "ecdsa-sha2-nistp256" */
-    char fingerprint[64];    /* "SHA256:p2QAMXNIC1..." as ssh shows it */
+    char type[32];           /* "ecdsa-sha2-nistp256", "TLS certificate" */
+    char fingerprint[128];   /* "SHA256:p2QAMXNIC1..." as ssh shows it; a certificate's
+                                SHA-256 "AB:CD:..." as openssl x509 -fingerprint does */
+    char about[256];         /* a certificate: subject, issuer, until when; "" for SSH */
     int known;               /* VFR_HK_... */
-    char file[256];          /* the known_hosts consulted */
+    char file[256];          /* the known_hosts (known_tls) consulted */
 } vfr_hostkey;
 
 typedef struct vf_remote vf_remote;

@@ -200,7 +200,7 @@ void vf_app_free(vf_app *a)
 static const char *labels[FF_COUNT] = { "Protocol", "Host", "Port", "User", "Password", "Key file",
                                         "Key passphrase", "Remote directory" };
 static const char *hints[FF_COUNT] = {
-    "SFTP or FTP (SCP comes later). FTP sends the password in clear: you are asked.",
+    "SFTP or FTP (SCP comes later). FTP uses TLS when the server has it (D12).",
     "The server's name or address.",
     "The port: SFTP normally 22, FTP 21.",
     "Your user name on the server.",
@@ -351,18 +351,34 @@ static void clearpw_ask(vf_app *a)
 
 static void hostkey_ask(vf_app *a)
 {
+    int tls = a->proto == VFR_FTP;
     text_free(a);
     vf_strlcpy(a->text_title, "A server VFTP has not seen before", sizeof a->text_title);
     text_add(a, "The authenticity of %s (port %d) can't be established:", a->host, a->port);
-    text_add(a, "%s (%s)", a->hk.known == VFR_HK_NOFILE ? "There is no known_hosts file yet"
-                                                         : "Its key is not in known_hosts", a->hk.file);
+    text_add(a, "%s:", a->hk.known == VFR_HK_NOFILE ? (tls ? "There is no known_tls file yet"
+                                                            : "There is no known_hosts file yet")
+                                                     : (tls ? "Its TLS certificate is not in known_tls"
+                                                            : "Its key is not in known_hosts"));
+    text_add(a, "  %s", a->hk.file);
     text_add(a, "");
-    text_add(a, "  Key type      %s", a->hk.type);
-    text_add(a, "  Fingerprint   %s", a->hk.fingerprint);
+    if (!tls) text_add(a, "  Key type      %s", a->hk.type);
+    if (tls) {
+        /* 95 characters: the SHA-256 on two lines */
+        text_add(a, "  SHA-256       %.48s", a->hk.fingerprint);
+        if (strlen(a->hk.fingerprint) > 48) text_add(a, "                %s", a->hk.fingerprint + 48);
+        text_add(a, "  About         %.60s", a->hk.about);
+        if (strlen(a->hk.about) > 60) text_add(a, "                %.60s", a->hk.about + 60);
+    } else text_add(a, "  Fingerprint   %s", a->hk.fingerprint);
     text_add(a, "");
     text_add(a, "Check the fingerprint with the server's owner (on the server:");
-    text_add(a, "ssh-keygen -l -f its host key file) before you answer Y.");
-    text_add(a, "Y adds the key to known_hosts, as ssh does, and logs in.");
+    if (tls) {
+        text_add(a, "openssl x509 -noout -fingerprint -sha256 -in its certificate)");
+        text_add(a, "before you answer Y. Y adds it to known_tls and logs in over TLS;");
+        text_add(a, "a different certificate later is refused (D12).");
+    } else {
+        text_add(a, "ssh-keygen -l -f its host key file) before you answer Y.");
+        text_add(a, "Y adds the key to known_hosts, as ssh does, and logs in.");
+    }
     a->mode = M_CONFIRM;
     a->prompt = P_ASK;
     a->ask = ASK_HOSTKEY;
@@ -395,8 +411,12 @@ static void connect_now(vf_app *a)
     if (a->hk.known == VFR_HK_MISMATCH) {
         logf_("HOSTKEY MISMATCH %s:%d %s %s", a->host, port, a->hk.type, a->hk.fingerprint);
         disconnect(a, "host key changed");
-        form_fail(a, FF_HOST, "REFUSED: %s's key %s is not the one in known_hosts: it was "
-                  "changed, or someone is in between.", a->host, a->hk.fingerprint);
+        if (a->proto == VFR_FTP)
+            form_fail(a, FF_HOST, "REFUSED: %s's TLS certificate is not the one in known_tls: it "
+                      "was changed, or someone is in between.", a->host);
+        else
+            form_fail(a, FF_HOST, "REFUSED: %s's key %s is not the one in known_hosts: it was "
+                      "changed, or someone is in between.", a->host, a->hk.fingerprint);
         return;
     }
     if (a->hk.known != VFR_HK_MATCH) { hostkey_ask(a); return; }
@@ -1027,7 +1047,7 @@ static void ask_answer(vf_app *a, int key)
     switch (ask) {
     case ASK_HOSTKEY:
         if (!yes) { disconnect(a, "host key not trusted"); form_fail(a, FF_HOST, "Not connected: the server was not trusted"); return; }
-        if (!(vfr_trust(a->rem) & 1)) vf_set_msg(a, 1, "Could not add the key to %s: %s", a->hk.file, vfr_error(a->rem));
+        if (!(vfr_trust(a->rem) & 1)) vf_set_msg(a, 1, "Could not add it to %s: %s", a->hk.file, vfr_error(a->rem));
         else logf_("HOSTKEY ADDED %s:%d %s %s to %s", a->host, a->port, a->hk.type, a->hk.fingerprint, a->hk.file);
         login(a);
         return;

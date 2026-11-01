@@ -265,7 +265,7 @@ static void draw_form(vf_app *a)
         vf_put(s, r, 2, a->form_err, VF_A_BOLD | VF_A_REV, cut);
         if (n > cut) vf_put(s, r + 1, 2, a->form_err + cut + (a->form_err[cut] == ' '), VF_A_BOLD | VF_A_REV, w);
     } else vf_put(s, r, 2, vf_field_hint(a->fcur), 0, s->cols - 4);
-    vf_put(s, r - 1, 2, ftp ? "FTP is not encrypted: you are asked before a password is sent (D10)."
+    vf_put(s, r - 1, 2, ftp ? "FTP: TLS if the server has it; if not, you are asked before a password goes."
                             : "The server's key is checked against known_hosts in your SSH directory.",
            0, s->cols - 4);
     menu_line(s, s->rows - 2, "FORM", "Up/Down Tab Return: field to field   Ctrl/U erase   Ctrl/A overstrike", 0);

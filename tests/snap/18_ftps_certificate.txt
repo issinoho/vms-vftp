@@ -1,0 +1,24 @@
+ VFTP  A server VFTP has not seen before                      25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ The authenticity of test.example (port 21) can't be established:             │
+│ Its TLS certificate is not in known_tls:                                     │
+│   STUB$DKA0:[USERS.TEST.SSH]VFTP_KNOWN_TLS.                                  │
+│                                                                              │
+│   SHA-256       AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:             │
+│                 AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89              │
+│   About         /CN=test.example, issued by itself, valid until Nov  1 2027  │
+│                 GMT                                                          │
+│                                                                              │
+│ Check the fingerprint with the server's owner (on the server:                │
+│ openssl x509 -noout -fingerprint -sha256 -in its certificate)                │
+│ before you answer Y. Y adds it to known_tls and logs in over TLS;            │
+│ a different certificate later is refused (D12).                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Trust this server and connect? (Y/N) [N]:
+ CHOOSE  Y do it   any other key: do nothing   Up/Down scroll

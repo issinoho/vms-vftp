@@ -16,7 +16,7 @@
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│ FTP is not encrypted: you are asked before a password is sent (D10).         │
+│ FTP: TLS if the server has it; if not, you are asked before a password goes. │
 │ The server's name or address.                                                │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘

@@ -9,6 +9,8 @@ set -euo pipefail
 top=$(cd "$(dirname "$0")/.." && pwd)
 node=${1:?usage: live_unix.sh <node> [step...]}; shift
 [ -f "$top/tools/live_key" ] || { echo "live_unix.sh: no tools/live_key (the test's login key)" >&2; exit 2; }
+. "$top/tools/node_lock.sh"
+node_lock "$node" 9
 since=$(date '+%Y-%m-%d %H:%M:%S')
 read -r HOST PORT RDIR < <("$top/tools/unix_sftpd.sh" start)
 trap '"$top/tools/unix_sftpd.sh" stop' EXIT

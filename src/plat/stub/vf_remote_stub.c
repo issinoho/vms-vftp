@@ -16,9 +16,9 @@
 typedef struct { char path[256]; int is_dir; char *data; int len; unsigned int perms; int used; } rnode;
 
 static rnode srv[MAXR];
-static int trusted, changed;
+static int trusted, changed, ftps, ftps_trusted;
 
-struct vf_remote { char err[256]; int logged_in; int ftp; };
+struct vf_remote { char err[256]; int logged_in; int ftp, tls; };
 struct vfr_file { vf_remote *r; rnode *n; int pos, writing; char *buf; int len; char path[256]; };
 
 static rnode *rfind(const char *path)
@@ -47,6 +47,7 @@ static rnode *radd(const char *path, int is_dir, const char *data, int len)
 
 void stub_add_remote(const char *path, const char *data, int len) { radd(path, 0, data, len); }
 void stub_trust(int on) { trusted = on; }
+void stub_ftps(int on) { ftps = on; ftps_trusted = 0; }
 void stub_change_key(int on) { changed = on; }
 
 const char *stub_remote(const char *path, int *len)
@@ -93,7 +94,19 @@ unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **r, v
     }
     *r = (vf_remote *) calloc(1, sizeof **r);
     memset(hk, 0, sizeof *hk);
-    if (proto == VFR_FTP) { (*r)->ftp = 1; hk->known = VFR_HK_MATCH; return 1; }   /* no host key */
+    if (proto == VFR_FTP) {
+        (*r)->ftp = 1;
+        if (!ftps) { hk->known = VFR_HK_MATCH; return 1; }           /* plain: nothing to check */
+        (*r)->tls = 1;                                               /* AUTH TLS taken (D12) */
+        vf_strlcpy(hk->type, "TLS certificate", sizeof hk->type);
+        vf_strlcpy(hk->fingerprint, "AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:"
+                   "AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89", sizeof hk->fingerprint);
+        vf_strlcpy(hk->about, "/CN=test.example, issued by itself, valid until Nov  1 2027 GMT",
+                   sizeof hk->about);
+        vfp_ssh_file("vftp_known_tls", hk->file, sizeof hk->file);
+        hk->known = ftps_trusted ? VFR_HK_MATCH : VFR_HK_NOTFOUND;
+        return 1;
+    }
     vf_strlcpy(hk->type, "ecdsa-sha2-nistp256", sizeof hk->type);
     vf_strlcpy(hk->fingerprint, "SHA256:TESTtestTESTtestTESTtestTESTtestTESTtes", sizeof hk->fingerprint);
     vfp_ssh_file("known_hosts", hk->file, sizeof hk->file);
@@ -104,13 +117,13 @@ unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **r, v
 unsigned int vfr_trust(vf_remote *r)
 {
     char kh[256];
-    (void) r;
+    if (r->tls) { ftps_trusted = 1; return 1; }
     vfp_ssh_file("known_hosts", kh, sizeof kh);
     trusted = 1;
     return vfp_append_line(kh, "test.example ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAI");
 }
 
-int vfr_secure(vf_remote *r) { return r && !r->ftp; }
+int vfr_secure(vf_remote *r) { return r && (!r->ftp || r->tls); }
 int vfr_vms_paths(vf_remote *r) { (void) r; return 0; }
 
 unsigned int vfr_methods(vf_remote *r, const char *user, char *out, int size)

@@ -5,6 +5,8 @@ set -euo pipefail
 top=$(cd "$(dirname "$0")/.." && pwd)
 node=${1:?usage: build.sh <node> [TEST]}
 what=${2:-}
+. "$top/tools/node_lock.sh"
+node_lock "$node" 9
 read -r _ _ _ _ _ _ _ SSH2 < <(awk -v n="$node" '$1==n' "$top/tools/nodes.conf")
 [ -n "${SSH2:-}" ] || { echo "build: no libssh2 install tree for $node in tools/nodes.conf" >&2; exit 2; }
 mkdir -p "$top/out"

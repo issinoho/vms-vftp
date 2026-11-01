@@ -13,6 +13,9 @@ node=${1:?usage: live.sh <node> [--server <node2>] [step...]}; shift
 server=
 if [ "${1:-}" = --server ]; then server=${2:?live.sh: --server needs a node}; shift 2; fi
 conf() { awk -v n="$1" '$1==n' "$top/tools/nodes.conf"; }
+. "$top/tools/node_lock.sh"
+node_lock "$node" 9
+if [ -n "$server" ]; then node_lock "$server" 8; fi
 [ -f "$top/tools/live_key" ] || { echo "live.sh: no tools/live_key (the test's login key)" >&2; exit 2; }
 if [ -n "$server" ]; then
     read -r _ _ HOST PORT _ _ SFTPDIR _ < <(conf "$server")

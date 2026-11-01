@@ -9,6 +9,8 @@ set -euo pipefail
 top=$(cd "$(dirname "$0")/.." && pwd)
 node=${1:?usage: live_ftp.sh <node> [step...]}; shift
 pass_file=$top/tools/live_ftp_pass
+. "$top/tools/node_lock.sh"
+node_lock "$node" 9
 rdir=${VFTP_FTP_DIR:-'USER$ROOT:[VFTPTEST]'}
 [ -f "$pass_file" ] || { echo "live_ftp.sh: no tools/live_ftp_pass (the test account's password)" >&2; exit 2; }
 [ -f "$top/tools/live_key" ] || { echo "live_ftp.sh: no tools/live_key" >&2; exit 2; }

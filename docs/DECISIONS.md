@@ -94,3 +94,17 @@ kept in the git-ignored `tools/live_ftp_pass` like the test key (CLAUDE.md: test
 passwords are made for the test and never committed), and put on the node only
 for the run. The user's own password is never in a script. Considered: anonymous
 FTP (a larger server change); FTP tested by hand only.
+
+## D12. FTPS: explicit TLS when the server takes it; the certificate pinned on first use (2026-11-01, proposed)
+
+An FTP connection sends AUTH TLS first. If the server takes it, the control
+connection goes to TLS (1.2 or later) and, after the login, PBSZ 0 and PROT P put
+every data connection in TLS too, reusing the control connection's session. The
+server's certificate is not checked against certificate authorities: its SHA-256
+is shown the first time ("openssl x509 -fingerprint -sha256" shows the same),
+added to VFTP's known_tls file in the SSH directory when the user says Y, and a
+different one later is refused, as an SSH host key is (D7). A server that refuses
+AUTH TLS (both nodes, N8) gets plain FTP, and the password question of D10.
+Considered: CA checking (VMS systems rarely have a CA bundle set up, and test and
+internal servers use self-signed certificates); requiring TLS (no FTP to the
+nodes at all); implicit FTPS on port 990 (rare, and not in RFC 4217).

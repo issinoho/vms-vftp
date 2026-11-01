@@ -61,8 +61,16 @@ $ define/job vftp$log 'live'vftp.log
 $ build = here - "]" + ".BUILD]"
 $ vftp :== $'build'vftp.exe
 $ drive := $'here'ptydrive.exe
+$! no VFTP.EXE (a build under way): PTYDRIVE would type the script at the DCL
+$! prompt, a test password and all (N12)
+$ if f$search(build + "vftp.exe") .eqs. ""
+$ then
+$   write sys$output "LIVE: no ''build'VFTP.EXE: nothing typed"
+$   goto driven
+$ endif
 $ set default 'live'
 $ drive 'keys'
+$ driven:
 $ set default 'here'
 $ deassign/job vftp$log
 $ deassign/job sys$login
