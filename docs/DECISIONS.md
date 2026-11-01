@@ -95,7 +95,7 @@ passwords are made for the test and never committed), and put on the node only
 for the run. The user's own password is never in a script. Considered: anonymous
 FTP (a larger server change); FTP tested by hand only.
 
-## D12. FTPS: explicit TLS when the server takes it; the certificate pinned on first use (2026-11-01, proposed)
+## D12. FTPS: explicit TLS when the server takes it; the certificate pinned on first use (2026-11-01, accepted)
 
 An FTP connection sends AUTH TLS first. If the server takes it, the control
 connection goes to TLS (1.2 or later) and, after the login, PBSZ 0 and PROT P put
