@@ -109,8 +109,9 @@ Status 2026-10-31: the FTP core (vf_ftpcore: replies, PASV/EPSV/PWD, LIST from V
 Unix and Windows) and client (vf_ftp.c) are done; the app has a Protocol field and
 asks before a password goes without TLS (D10). Live on both nodes against their own
 FTP servers as VFTPTEST (N10), and against a Unix server, pyftpdlib on Linux (N11).
-Still to do: REST (the VMS servers have none, N8), SITE CHMOD, and FTPS (both
-nodes' AUTH TLS is refused).
+FTPS (D12): explicit TLS, the certificate pinned on first use; live against
+pyftpdlib with TLS required (N13); the nodes refuse AUTH TLS and get plain FTP.
+Still to do: REST (the VMS servers have none, N8) and SITE CHMOD.
 
 ## Phase 3: SCP and the rest
 

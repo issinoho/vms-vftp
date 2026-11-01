@@ -234,3 +234,20 @@ and leave the first one running. Now: tools/node_lock.sh, taken by build.sh and
 every live script, allows one run per node (a second stops at once, saying so);
 test_live.com types nothing if VFTP.EXE is missing; and a script is not edited
 while it runs.
+
+## N13. FTPS against pyftpdlib with TLS required (2026-11-01, live_unix_ftp.sh --tls)
+
+pyftpdlib 2.0.1 with pyOpenSSL 24.2.1, a test-only self-signed EC certificate
+(CN=vftp-test-ftps, 30 days), tls_control_required and tls_data_required: nothing
+in clear is accepted. From x86 and IA64 (VSI SSL3, OpenSSL 3.0), run by the user one
+after the other; all 13 checks on both:
+- AUTH TLS (234), the handshake, the certificate asked about on the host-key screen:
+  N disconnects; Y adds "[host]:2121 <SHA-256>" to [.SSH]vftp_known_tls, the same
+  fingerprint as openssl x509 -fingerprint -sha256 gives. No D10 question. After the
+  login PBSZ 0 and PROT P; every LIST, RETR and STOR on a TLS data connection (the
+  server would refuse a plain one), reusing the control connection's session.
+- A second login in the same run asks nothing (known_tls matches).
+- The rest as N11 (replace by temporary name, N/Y, Get/Put/cancel, mkdir, rename,
+  delete), over TLS.
+The nodes' own FTP servers refuse AUTH TLS (500): plain FTP with the D10 question,
+re-run after the TLS work on both nodes (live_ftp.sh, all 7 checks).
