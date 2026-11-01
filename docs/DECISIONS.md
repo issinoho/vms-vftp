@@ -136,7 +136,7 @@ question would come file by file, mid-transfer); following links (loops, and the
 same files twice); asking before every directory (noise: copying a directory into
 one that does not hold it changes nothing that is there).
 
-## D14. The sites file: blocks of "key = value", saved from the Open form (2026-11-01, proposed)
+## D14. The sites file: blocks of "key = value", saved from the Open form (2026-11-01, accepted)
 
 `VFTP$SITES` (default `SYS$LOGIN:VFTP.SITES`), a text file to read and edit by
 hand: a `[name]` line starts a site, then `protocol`, `host`, `port`, `user`, `key`,
