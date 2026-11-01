@@ -321,3 +321,20 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
   Run again on x86 (by the user, 1-NOV-2026): all 9 checks passed, r.txt among them,
   and the log has no FAILED line but the two cancels the test makes. Not seen again;
   if it comes back, VFTP$LOG now has the reason.
+
+## N17. F5, Backspace, and an SSH password login (2026-11-01, x86 and IA64)
+
+- F5 arrives as SMG$K_TRM_F5 (285) from the PTY's `ESC [15~`, and DEL (127) as
+  itself: live_dirs.sh's SFTP script leaves the server directory by DEL and gets
+  the tree by F5, all 11 checks on both nodes. SMGDEF also has SMG$K_TRM_CTRLH and
+  SMG$K_TRM_BS (8), which go up a directory too.
+- A password login by SSH as VFTPTEST to localhost fails on both nodes, from VFTP
+  ("Waiting for keyboard USERAUTH response") and from probes/probe_sshpass.c, which
+  tries each method on a fresh session: the "password" method, sshd closes the
+  connection (-13, LIBSSH2_ERROR_SOCKET_DISCONNECT); keyboard-interactive is
+  refused (-18) without a single prompt. sshd's log (SSH$ROOT:[VAR]<node>_localhost_
+  <pid>.log) has "Failed password for vftptest from 127.0.0.1". The same password
+  logs in by FTP; in upper case it fails the same way. sshd_config has no Allow/Deny
+  lines and nothing about passwords; the UAF gives VFTPTEST Network and Remote
+  access, no Local, Batch or Dialup, Pwdminimum 15 against a 7-character password,
+  and no intrusion record names it. Not explained yet: needs the system manager.
