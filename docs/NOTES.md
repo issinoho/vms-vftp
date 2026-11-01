@@ -318,3 +318,6 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
   log a Get that fails at the open: it does now (and a Put, and a failed close),
   with the whole error, for the next run. The ssh to x86 had timed out an hour
   before ("server not responding").
+  Run again on x86 (by the user, 1-NOV-2026): all 9 checks passed, r.txt among them,
+  and the log has no FAILED line but the two cancels the test makes. Not seen again;
+  if it comes back, VFTP$LOG now has the reason.
