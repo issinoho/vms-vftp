@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# unix_sftpd.sh start|stop - a private OpenSSH SFTP server on this Linux machine, for
-# the Unix-server live test (tools/live_unix.sh). It runs as you, not root, in the
-# foreground of its own process group, and serves SFTP only (internal-sftp), only to
-# the test key tools/live_key.pub, only from the nodes in tools/nodes.conf, and only
-# until "stop". No password login. Everything is in out/unix (git-ignored): the
+# unix_sftpd.sh start [scp]|stop - a private OpenSSH SFTP server on this Linux
+# machine, for the Unix-server live test (tools/live_unix.sh). It runs as you, not
+# root, in the foreground of its own process group, and serves SFTP only
+# (internal-sftp), only to the test key tools/live_key.pub, only from the nodes in
+# tools/nodes.conf, and only until "stop". No password login. With "scp" (D15) it
+# runs no SFTP: every command goes through tools/unix_scp_gate.py, which runs only
+# VFTP's SCP commands on names inside remote/, and logs them to scp-gate.log. Everything is in out/unix (git-ignored): the
 # server's host key, its authorized_keys, its log, and remote/, the scratch directory
 # the test works in.
 set -euo pipefail
 top=$(cd "$(dirname "$0")/.." && pwd)
 d=$top/out/unix
 port=${VFTP_UNIX_PORT:-2299}
-op=${1:?usage: unix_sftpd.sh start|stop}
+op=${1:?usage: unix_sftpd.sh start [scp]|stop}
+mode=${2:-sftp}
 
 stop() {
     if [ -f "$d/sshd.pid" ]; then kill "$(cat "$d/sshd.pid")" 2>/dev/null || true; rm -f "$d/sshd.pid"; fi
@@ -19,7 +22,7 @@ stop() {
 case $op in
 stop) stop; exit 0 ;;
 start) ;;
-*) echo "usage: unix_sftpd.sh start|stop" >&2; exit 2 ;;
+*) echo "usage: unix_sftpd.sh start [scp]|stop" >&2; exit 2 ;;
 esac
 
 [ -f "$top/tools/live_key.pub" ] || { echo "unix_sftpd.sh: no tools/live_key.pub" >&2; exit 2; }
@@ -37,6 +40,12 @@ first=$(awk '!/^#/ && NF {print $3; exit}' "$top/tools/nodes.conf")
 listen=$(ip -4 route get "$first" | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 echo "restrict,from=\"$nodes\" $(cat "$top/tools/live_key.pub")" > "$d/authorized_keys"
 chmod 600 "$d/authorized_keys"
+if [ "$mode" = scp ]; then
+    force="/usr/bin/python3 -I $top/tools/unix_scp_gate.py $d/remote"
+    rm -f "$d/scp-gate.log"
+else
+    force="internal-sftp -l INFO -d $d/remote"
+fi
 cat > "$d/sshd_config" <<EOF
 Port $port
 ListenAddress $listen
@@ -52,7 +61,7 @@ StrictModes no
 AllowTcpForwarding no
 X11Forwarding no
 PermitTTY no
-ForceCommand internal-sftp -l INFO -d $d/remote
+ForceCommand $force
 Subsystem sftp internal-sftp
 LogLevel VERBOSE
 EOF
