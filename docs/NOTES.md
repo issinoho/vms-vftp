@@ -348,3 +348,33 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
   says "the server closed the connection: <reason>", and does not try
   keyboard-interactive on a connection the server has closed. Built on both
   nodes; that message has not been seen live (the refusal is gone now).
+
+## N18. SCP against OpenSSH on Linux, both nodes (2026-11-02, tools/live_unix.sh --scp)
+
+- The server: OpenSSH 10.2 on the Linux host (tools/unix_sftpd.sh start scp), its
+  ForceCommand tools/unix_scp_gate.py, which runs only `scp -t/-f/-pf <path>` and
+  `sh -c <script>` for scripts of vf_sftp.c's templates, every name inside the
+  test's scratch directory, and logs each ALLOW or REFUSE. Run by the user (the
+  permission classifier will not start a listening sshd); 10 checks on each node.
+- First run: the listing, mkdir, rename, chmod (GOLD A go-r) and delete passed on
+  IA64, and the gate refused nothing. Two bugs:
+  - A Get: an ACCVIO with PC=0 on x86, 0 bytes on IA64. libssh2 is built with
+    `_USE_STD_STAT=1` and `_LARGEFILE`, and its scp_recv2 fills a struct stat;
+    vf_sftp.c was built without them, so its struct stat was smaller, and libssh2
+    wrote past it. build_vms.com now compiles vf_sftp.c with the same defines.
+  - A Put: "the server's scp ended with status 1". After the file's data the
+    sender writes one `\0` ("sent, all well"); libssh2 leaves that to the caller.
+    scp_close now writes it before the EOF.
+- Second run: all 10 on x86, the cancelled Get of the 10 MB big.bin among them
+  (closing the channel early did not hang). On IA64 the second connect showed its
+  trust question only after more than 18s; the script's "y" came first and was
+  lost, the next key answered No, and the rest typed into the Open form. sshd's
+  only penalty for the refused first connect was 1s. The script waits 20s now;
+  then all 10 passed on IA64 too (Gets byte for byte and as text lines, a text
+  Put as LF lines, the replace by `mv -f`, big.bin never sent to by the cancelled
+  replacing Put, no .vftp-part left).
+- After the compile change, live_dirs.sh on both nodes: all 14 checks (SFTP Put
+  and Get of whole directories, GOLD A, sites, a password login as VFTPTEST,
+  SCP to VMS sshd refused "no Unix shell").
+- x86's sshd moved to a new port during these runs (set by the user;
+  tools/nodes.conf has it); live_dirs.sh passed on the new port.

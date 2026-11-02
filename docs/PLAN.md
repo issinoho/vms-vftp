@@ -135,8 +135,10 @@ by SFTP and by FTP (N14). The sites file (D9, D14): `L`, saved from the Open for
 remote pane (644, rw-r--r--, go-w) by SFTP setstat and FTP SITE CHMOD; live by
 SFTP to both nodes, refused on a VMS FTP server (N16).
 From Phase 1: F5 copies and Backspace goes up, live on both nodes; a password
-login by SSH as VFTPTEST is part of live_dirs.sh, passing on both (N17). Left:
-SCP, and resume (how it fits D8 to be decided).
+login by SSH as VFTPTEST is part of live_dirs.sh, passing on both (N17).
+Status 2026-11-02: SCP (D15, proposed): live from both nodes against OpenSSH on
+Linux through a command gate, and refused by VMS sshd (N18). Left: resume (how it
+fits D8 to be decided).
 
 ## Phase 4: kits and release
 
