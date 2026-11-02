@@ -4,6 +4,8 @@
 # The server has no versions, so a Put of a name it has asks first (default No),
 # and a replacing Put that is cancelled must leave the old file (big.bin) as it was.
 # PTYDRIVE knows \r \e \\ \xHH only: Tab is \x09. Pick files by filter and GOLD Down.
+# The second connect waits 20s: on IA64 its trust question once took over 18s to show,
+# and a key typed before it is lost, so the next one answered it No.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 3 form closed | \e[21~
@@ -16,7 +18,7 @@
 2 rdir | \x05\x15@RDIR@
 10 connect | \e[29~
 3 not trusted | n
-10 connect again | \e[29~
+20 connect again | \e[29~
 8 trust | y
 2 remote down | \e[B
 3 remote attributes | a
