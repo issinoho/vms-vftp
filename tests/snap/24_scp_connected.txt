@@ -1,0 +1,24 @@
+ VFTP  scp test@test.example:/home/test                       25-OCT-2026 10:12
+┌ LOCAL STUB$DKA0:[USERS.TEST] ─────────┬ REMOTE /home/test ───────────────────┐
+│ [-]  (parent directory)               │ ..   (parent directory)              │
+│ SSH.DIR;1                 <DIR> 21-OCT│ data/                    <DIR> 24-OCT│
+│ WORK.DIR;1                <DIR> 21-OCT│ README.md                   10 24-OCT│
+│ KIT.BCK;1                     3 21-OCT│ kit.zip                   2000 24-OCT│
+│ LOGIN.COM;1                   1 21-OCT│ notes.txt                   23 24-OCT│
+│ NOTES.TXT;2                   1 22-OCT│                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+│                                       │                                      │
+├───────────────────────────────────────┴──────────────────────────────────────┤
+│ 3 files 2033 bytes                         Mode AUTO   SCP test@test.example │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Logged in to test.example as test
+ COMMANDS  PF1 GOLD  Tab other pane  Return open  Left up  Jump  Help  F10 exit

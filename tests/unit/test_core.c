@@ -286,7 +286,7 @@ static void test_sites(void)
     vf_sites_line(&t, "[x]");
     vf_sites_line(&t, "password = secret");
     vf_sites_line(&t, "colour = blue");
-    vf_sites_line(&t, "protocol = scp");
+    vf_sites_line(&t, "protocol = telnet");
     vf_sites_line(&t, "port = 22a");
     vf_sites_line(&t, "[y]");
     vf_sites_line(&t, "host = ok");
@@ -329,6 +329,19 @@ static void test_perms(void)
 #undef PERMS
 }
 
+static void test_shquote(void)
+{
+    char b[64];
+    CHECK(vf_shquote("/home/a b", b, sizeof b)); CHECKS(b, "'/home/a b'");
+    CHECK(vf_shquote("it's", b, sizeof b)); CHECKS(b, "'it'\\''s'");
+    CHECK(vf_shquote("$(rm -rf ~);`x`", b, sizeof b)); CHECKS(b, "'$(rm -rf ~);`x`'");
+    CHECK(vf_shquote("", b, sizeof b)); CHECKS(b, "''");
+    CHECK(!vf_shquote("abc", b, 5) && !b[0]);              /* 'abc' and NUL are 6 */
+    CHECK(vf_shquote("abc", b, 6)); CHECKS(b, "'abc'");
+    CHECK(!vf_shquote("a'", b, 7) && !b[0]);               /* 'a'\''' and NUL are 8 */
+    CHECK(vf_shquote("a'", b, 8)); CHECKS(b, "'a'\\'''");
+}
+
 int main(void)
 {
     test_util();
@@ -339,6 +352,7 @@ int main(void)
     test_screen();
     test_sites();
     test_perms();
+    test_shquote();
     printf("test_core: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

@@ -212,7 +212,7 @@ void vf_app_free(vf_app *a)
 static const char *labels[FF_COUNT] = { "Protocol", "Host", "Port", "User", "Password", "Key file",
                                         "Key passphrase", "Remote directory" };
 static const char *hints[FF_COUNT] = {
-    "SFTP or FTP (SCP comes later). FTP uses TLS when the server has it (D12).",
+    "SFTP, SCP (Unix servers) or FTP. FTP uses TLS when the server has it (D12).",
     "The server's name or address.",
     "The port: SFTP normally 22, FTP 21.",
     "Your user name on the server.",
@@ -233,7 +233,7 @@ static void form_open(vf_app *a)
     vf_edit_init(&a->fedit, a->fv[a->fcur]);
 }
 
-/* "sftp", "ftp" as typed: VFR_SFTP, VFR_FTP, 0 if neither */
+/* "sftp", "ftp", "scp" as typed: VFR_SFTP, VFR_FTP, VFR_SCP, 0 if none */
 static int proto_of(const char *s)
 {
     char t[16];
@@ -241,7 +241,13 @@ static int proto_of(const char *s)
     vf_trim(t);
     if (!vf_strcasecmp(t, "SFTP")) return VFR_SFTP;
     if (!vf_strcasecmp(t, "FTP")) return VFR_FTP;
+    if (!vf_strcasecmp(t, "SCP")) return VFR_SCP;
     return 0;
+}
+
+const char *vf_proto_name(int proto)
+{
+    return proto == VFR_FTP ? "FTP" : proto == VFR_SCP ? "SCP" : "SFTP";
 }
 
 static void form_store(vf_app *a)
@@ -250,9 +256,9 @@ static void form_store(vf_app *a)
     if (a->fcur == FF_PROTO) {
         /* the other protocol's usual port follows the protocol */
         int pr = proto_of(a->fv[FF_PROTO]);
-        if (pr) vf_strlcpy(a->fv[FF_PROTO], pr == VFR_FTP ? "FTP" : "SFTP", VF_FIELD);
+        if (pr) vf_strlcpy(a->fv[FF_PROTO], vf_proto_name(pr), VF_FIELD);
         if (pr == VFR_FTP && !strcmp(a->fv[FF_PORT], "22")) vf_strlcpy(a->fv[FF_PORT], "21", VF_FIELD);
-        if (pr == VFR_SFTP && !strcmp(a->fv[FF_PORT], "21")) vf_strlcpy(a->fv[FF_PORT], "22", VF_FIELD);
+        if (pr && pr != VFR_FTP && !strcmp(a->fv[FF_PORT], "21")) vf_strlcpy(a->fv[FF_PORT], "22", VF_FIELD);
     }
 }
 static void form_load(vf_app *a) { vf_edit_init(&a->fedit, a->fv[a->fcur]); }
@@ -319,7 +325,7 @@ static void login(vf_app *a)
         if (st == VFR_AUTH)
             form_fail(a, *how == 'p' ? FF_PASSWORD : FF_KEY, "Login refused: %s (the server offers %s)",
                       e, methods);
-        else if (a->proto == VFR_FTP)
+        else if (a->proto != VFR_SFTP)
             form_fail(a, FF_HOST, "Logged in, but then: %s", e);
         else
             form_fail(a, FF_HOST, "Logged in, but the server gave no SFTP: %s", e);
@@ -405,7 +411,7 @@ static void connect_now(vf_app *a)
     int port;
     form_store(a);
     vf_trim(a->fv[FF_HOST]); vf_trim(a->fv[FF_USER]); vf_trim(a->fv[FF_PORT]);
-    if (!proto_of(a->fv[FF_PROTO])) { form_fail(a, FF_PROTO, "SFTP or FTP (SCP comes in a later version)"); return; }
+    if (!proto_of(a->fv[FF_PROTO])) { form_fail(a, FF_PROTO, "SFTP, SCP or FTP"); return; }
     if (!a->fv[FF_HOST][0]) { form_fail(a, FF_HOST, "Which server?"); return; }
     if (!a->fv[FF_USER][0]) { form_fail(a, FF_USER, "Which user?"); return; }
     port = atoi(a->fv[FF_PORT]);
@@ -493,6 +499,34 @@ static const char *leaf(const char *name)
 {
     const char *s = strrchr(name, '/');
     return s ? s + 1 : name;
+}
+
+/* The exact bytes a Put of lspec sends (text: each record and its LF), for a
+   server that needs them first (SCP, D15): a first pass over the file. 1, or 0
+   with err filled (cancelled too). */
+static int put_size(vf_app *a, const char *lspec, int text, unsigned long long *size, char *err, int esz)
+{
+    static char buf[CHUNK + 1];
+    vfp_file *lf;
+    unsigned long long est;
+    unsigned int st;
+    int got;
+    *size = 0;
+    st = vfp_open_read(lspec, &text, &est, &lf);
+    for (; st & 1; ) {
+        st = vfp_read(lf, buf, CHUNK, &got);
+        if (st == VFP_EOF) { vfp_close(lf, 1); return 1; }
+        if (!(st & 1)) { vfp_close(lf, 1); break; }
+        *size += (unsigned long long) got + (text ? 1 : 0);
+        progress(a, 0);
+        if (a->cancel) { vfp_close(lf, 1); snprintf(err, (size_t) esz, "cancelled"); return 0; }
+    }
+    {
+        char m[200];
+        status_text(st, m, sizeof m);
+        snprintf(err, (size_t) esz, "%s: %s", lspec, m);
+    }
+    return 0;
 }
 
 /* Download one file step. 1 on success. */
@@ -591,7 +625,15 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
     }
     a->xfer_text = text;
     a->xfer_done = 0; a->xfer_total = est;
-    st = vfr_open_write(a->rem, wpath, text, &rf);
+    if (vfr_needs_size(a->rem)) {
+        if (!put_size(a, lspec, text, &est, err, esz)) {
+            vfp_close(lf, 1);
+            logf_("PUT %s -> %s FAILED: %s", lspec, rpath, err);
+            return 0;
+        }
+        a->xfer_total = est;
+    }
+    st = vfr_open_write(a->rem, wpath, text, est, &rf);
     if (!(st & 1)) {
         vfp_close(lf, 1);
         snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem));
@@ -1346,7 +1388,7 @@ static void help_build(vf_app *a)
     text_add(a, "  Left, -, Backspace           up one directory");
     text_add(a, "  J                            jump to a directory (a VMS spec or a path)");
     text_add(a, "CONNECTION");
-    text_add(a, "  O                            open (SFTP or FTP); GOLD O closes it");
+    text_add(a, "  O                            open (SFTP, SCP or FTP); GOLD O closes it");
     text_add(a, "  L                            saved sites: open one, save the Open form's");
     text_add(a, "FILES");
     text_add(a, "  G  Get                       download the tagged (or current) entries");
@@ -1455,7 +1497,7 @@ static void site_use(vf_app *a, const vf_site *s)
     wipe(a->fv[FF_PASSWORD], VF_FIELD);
     wipe(a->fv[FF_PHRASE], VF_FIELD);
     form_defaults(a);
-    vf_strlcpy(a->fv[FF_PROTO], ftp ? "FTP" : "SFTP", VF_FIELD);
+    vf_strlcpy(a->fv[FF_PROTO], proto_of(keep.proto) ? vf_proto_name(proto_of(keep.proto)) : "SFTP", VF_FIELD);
     vf_strlcpy(a->fv[FF_HOST], keep.host, VF_FIELD);
     vf_strlcpy(a->fv[FF_PORT], keep.port[0] ? keep.port : ftp ? "21" : "22", VF_FIELD);
     if (keep.user[0]) vf_strlcpy(a->fv[FF_USER], keep.user, VF_FIELD);
@@ -1514,7 +1556,7 @@ static void site_add_done(vf_app *a, const char *name)
     if (!vf_site_name_ok(name)) { vf_set_msg(a, 1, "Not saved: a name has no [ or ], and up to %d characters", VF_SITE_NAME - 1); return; }
     memset(s, 0, sizeof *s);
     vf_strlcpy(s->name, name, sizeof s->name);
-    vf_strlcpy(s->proto, proto_of(a->fv[FF_PROTO]) == VFR_FTP ? "FTP" : "SFTP", sizeof s->proto);
+    vf_strlcpy(s->proto, vf_proto_name(proto_of(a->fv[FF_PROTO])), sizeof s->proto);
     vf_strlcpy(s->host, a->fv[FF_HOST], sizeof s->host);
     vf_strlcpy(s->port, a->fv[FF_PORT], sizeof s->port);
     vf_strlcpy(s->user, a->fv[FF_USER], sizeof s->user);

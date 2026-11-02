@@ -8,6 +8,7 @@
 # script uses Left and G.
 # Last, a password login (keyboard-interactive or password) as VFTPTEST (D11);
 # tools/live_dirs.sh fills in @PASS@ and deletes the filled file after the run.
+# Then SCP (D15) to the same sshd by key: refused, VMS has no Unix shell.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 2 host | \x05\x15localhost
@@ -51,4 +52,11 @@
 10 connect password | \e[29~
 5 password in | \x17
 3 exit password | \e[21~
+8 start scp | vftp\r
+2 scp proto | \e[A\x05\x15SCP
+2 scp host | \e[B\x05\x15localhost
+2 scp port | \e[B\x05\x15@PORT@
+10 scp connect | \e[29~
+3 scp form closed | \e[21~
+3 exit scp | \e[21~
 2 logout check | show default\r

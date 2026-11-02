@@ -1,6 +1,6 @@
-/* vf_remote.h - the remote side: one connection to an SFTP or FTP server (SCP
-   later, PLAN Phase 3). No libssh2 or socket types: src/net/vf_remote.c passes
-   each call to src/net/vf_sftp.c (libssh2, D3) or src/net/vf_ftp.c (our own, D4);
+/* vf_remote.h - the remote side: one connection to an SFTP, SCP or FTP server.
+   No libssh2 or socket types: src/net/vf_remote.c passes each call to
+   src/net/vf_sftp.c (SFTP and SCP, libssh2, D3) or src/net/vf_ftp.c (our own, D4);
    src/plat/stub/vf_remote_stub.c is an in-memory server for the Linux tests.
 
    Every call returns 1 on success and an even value on failure; vfr_error()
@@ -10,7 +10,8 @@
 
 #include "vf_pane.h"
 
-enum { VFR_SFTP = 1, VFR_FTP };
+/* SCP (D15): SFTP's login, then Unix shell commands to list and manage files. */
+enum { VFR_SFTP = 1, VFR_FTP, VFR_SCP };
 
 /* What known_hosts says about the server's key (D7), or known_tls about an FTPS
    server's certificate (D12). */
@@ -67,8 +68,11 @@ unsigned int vfr_chmod(vf_remote *r, const char *path, unsigned int mode);
 unsigned int vfr_open_read(vf_remote *r, const char *path, int text, vfr_file **f);
 /* Up to size bytes; *got 0 at the end. */
 unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got);
-/* Create or replace path (the app asks before replacing). */
-unsigned int vfr_open_write(vf_remote *r, const char *path, int text, vfr_file **f);
+/* Create or replace path (the app asks before replacing). size: the bytes that
+   will be written, exactly, where vfr_needs_size says the server must know them
+   first (SCP); otherwise a guess or 0. */
+unsigned int vfr_open_write(vf_remote *r, const char *path, int text, unsigned long long size, vfr_file **f);
+int vfr_needs_size(vf_remote *r);
 unsigned int vfr_write(vfr_file *f, const char *buf, int len);
 unsigned int vfr_close(vfr_file *f);
 

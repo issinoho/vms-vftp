@@ -1,4 +1,4 @@
-/* vf_rimpl.h - inside the remote layer: what each protocol (vf_sftp.c, vf_ftp.c)
+/* vf_rimpl.h - inside the remote layer: what each protocol (vf_sftp.c: SFTP, SCP; vf_ftp.c)
    gives vf_remote.c, which passes every vfr_ call on. Not for the app. */
 #ifndef VF_RIMPL_H
 #define VF_RIMPL_H
@@ -21,7 +21,7 @@ typedef struct {
     unsigned int (*chmod)(vf_remote *r, const char *path, unsigned int mode);
     unsigned int (*open_read)(vf_remote *r, const char *path, int text, vfr_file **f);
     unsigned int (*read)(vfr_file *f, char *buf, int size, int *got);
-    unsigned int (*open_write)(vf_remote *r, const char *path, int text, vfr_file **f);
+    unsigned int (*open_write)(vf_remote *r, const char *path, int text, unsigned long long size, vfr_file **f);
     unsigned int (*write)(vfr_file *f, const char *buf, int len);
     unsigned int (*close)(vfr_file *f);
     void (*keepalive)(vf_remote *r);
@@ -35,6 +35,7 @@ struct vf_remote {
     char banner[128];        /* "SSH-2.0-OpenSSH_9.9", "220 node FTP Server ..." */
     int secure;              /* a password sent now is encrypted */
     int vms_paths;           /* paths are VMS specs (a VMS FTP server, N8) */
+    int need_size;           /* open_write must have the exact size (SCP) */
 };
 struct vfr_file { vf_remote *r; };
 
@@ -43,6 +44,8 @@ int vfr_dial(const char *host, int port, char *err, int errsz);
 
 unsigned int vfr_sftp_connect(const char *host, int port, vf_remote **r, vfr_hostkey *hk,
                               char *err, int errsz);
+unsigned int vfr_scp_connect(const char *host, int port, vf_remote **r, vfr_hostkey *hk,
+                             char *err, int errsz);
 unsigned int vfr_ftp_connect(const char *host, int port, vf_remote **r, vfr_hostkey *hk,
                              char *err, int errsz);
 

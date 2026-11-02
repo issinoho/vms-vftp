@@ -1,7 +1,8 @@
 /* vf_remote_stub.c - vf_remote.h for the Linux tests: a server in memory at
    test.example (user "test", password "secret" or the stub's key file): SFTP on
    port 22, whose key known_hosts may or may not know (stub_trust,
-   stub_change_key), and the same files by FTP on port 21, with no TLS. */
+   stub_change_key), and the same files by FTP on port 21, with no TLS, and by
+   SCP on port 22, which needs a Put's size first and refuses one that differs. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,8 +19,9 @@ typedef struct { char path[256]; int is_dir, is_link; char *data; int len; unsig
 static rnode srv[MAXR];
 static int trusted, changed, ftps, ftps_trusted;
 
-struct vf_remote { char err[256]; int logged_in; int ftp, tls; };
-struct vfr_file { vf_remote *r; rnode *n; int pos, writing; char *buf; int len; char path[256]; };
+struct vf_remote { char err[256]; int logged_in; int ftp, tls, scp; };
+struct vfr_file { vf_remote *r; rnode *n; int pos, writing; char *buf; int len; char path[256];
+                  unsigned long long size; };
 
 static rnode *rfind(const char *path)
 {
@@ -96,6 +98,7 @@ unsigned int vfr_connect(int proto, const char *host, int port, vf_remote **r, v
     }
     *r = (vf_remote *) calloc(1, sizeof **r);
     memset(hk, 0, sizeof *hk);
+    (*r)->scp = proto == VFR_SCP;
     if (proto == VFR_FTP) {
         (*r)->ftp = 1;
         if (!ftps) { hk->known = VFR_HK_MATCH; return 1; }           /* plain: nothing to check */
@@ -127,6 +130,7 @@ unsigned int vfr_trust(vf_remote *r)
 
 int vfr_secure(vf_remote *r) { return r && (!r->ftp || r->tls); }
 int vfr_vms_paths(vf_remote *r) { (void) r; return 0; }
+int vfr_needs_size(vf_remote *r) { return r && r->scp; }
 
 unsigned int vfr_methods(vf_remote *r, const char *user, char *out, int size)
 {
@@ -291,7 +295,7 @@ unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got)
     return 1;
 }
 
-unsigned int vfr_open_write(vf_remote *r, const char *path, int text, vfr_file **f)
+unsigned int vfr_open_write(vf_remote *r, const char *path, int text, unsigned long long size, vfr_file **f)
 {
     char parent[256];
     rnode *d;
@@ -300,7 +304,7 @@ unsigned int vfr_open_write(vf_remote *r, const char *path, int text, vfr_file *
     d = rfind(parent);
     if (!d || !d->is_dir) { vf_strlcpy(r->err, "No such file", sizeof r->err); return VFR_FAIL; }
     *f = (vfr_file *) calloc(1, sizeof **f);
-    (*f)->r = r; (*f)->writing = 1;
+    (*f)->r = r; (*f)->writing = 1; (*f)->size = size;
     vf_strlcpy((*f)->path, path, sizeof (*f)->path);
     radd(path, 0, 0, 0);                   /* created (empty) at open, as SFTP does */
     return 1;
@@ -316,6 +320,13 @@ unsigned int vfr_write(vfr_file *f, const char *buf, int len)
 
 unsigned int vfr_close(vfr_file *f)
 {
+    if (f->writing && f->r->scp && (unsigned long long) f->len != f->size) {
+        /* as scp: the file was announced with another size */
+        snprintf(f->r->err, sizeof f->r->err, "SCP: %d bytes written, %llu announced", f->len, f->size);
+        free(f->buf);
+        free(f);
+        return VFR_FAIL;
+    }
     if (f->writing) radd(f->path, 0, f->buf, f->len);
     free(f->buf);
     free(f);

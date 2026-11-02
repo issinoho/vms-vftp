@@ -7,7 +7,7 @@
 │   Left, -, Backspace           up one directory                              │
 │   J                            jump to a directory (a VMS spec or a path)    │
 │ CONNECTION                                                                   │
-│   O                            open (SFTP or FTP); GOLD O closes it          │
+│   O                            open (SFTP, SCP or FTP); GOLD O closes it     │
 │   L                            saved sites: open one, save the Open form's   │
 │ FILES                                                                        │
 │   G  Get                       download the tagged (or current) entries      │

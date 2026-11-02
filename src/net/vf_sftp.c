@@ -1,6 +1,7 @@
 /* vf_sftp.c - vf_remote.h through libssh2 (D3): a TCP connection from the C RTL,
    the SSH handshake, the host key checked against VSI ssh's known_hosts (D7),
-   password, keyboard-interactive or key login, then SFTP. Blocking calls. */
+   password, keyboard-interactive or key login, then SFTP; or SCP (D15), the same
+   session with files by scp and the rest by Unix shell commands. Blocking calls. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 #include "vf_rimpl.h"
 #include "vf_platform.h"
 #include "vf_util.h"
+#include "vf_ftpcore.h"
 
 typedef struct {
     vf_remote base;          /* first: a vf_remote * is one of these */
@@ -24,6 +26,7 @@ typedef struct {
     char host[256];
     int port;
     char bye[200];           /* the server's reason, if it closed the connection */
+    int scp;                 /* SCP (D15): no SFTP; commands and scp */
 } sftp_remote;
 
 typedef struct {
@@ -257,9 +260,12 @@ static void kbd_answer(const char *name, int name_len, const char *instruction, 
     }
 }
 
+static unsigned int start_scp(sftp_remote *r);
+
 static unsigned int start_sftp(sftp_remote *r)
 {
     libssh2_keepalive_config(r->s, 1, 30);
+    if (r->scp) return start_scp(r);
     r->sftp = libssh2_sftp_init(r->s);
     if (!r->sftp) return fail(r, "SFTP");
     return 1;
@@ -447,7 +453,7 @@ static unsigned int sftp_read(vfr_file *ff, char *buf, int size, int *got)
     return 1;
 }
 
-static unsigned int sftp_open_write(vf_remote *rr, const char *path, int text, vfr_file **out)
+static unsigned int sftp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size, vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
     sftp_file *f;
@@ -455,7 +461,7 @@ static unsigned int sftp_open_write(vf_remote *rr, const char *path, int text, v
                                                LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC,
                                                LIBSSH2_SFTP_S_IRUSR | LIBSSH2_SFTP_S_IWUSR |
                                                LIBSSH2_SFTP_S_IRGRP | LIBSSH2_SFTP_S_IROTH);
-    (void) text;
+    (void) text; (void) size;
     if (!h) return fail(r, path);
     f = (sftp_file *) calloc(1, sizeof *f);
     if (!f) { libssh2_sftp_close(h); snprintf(r->base.err, sizeof r->base.err, "no memory"); return VFR_FAIL; }
@@ -510,3 +516,355 @@ static const vfr_ops ops = {
     sftp_open_read, sftp_read, sftp_open_write, sftp_write, sftp_close,
     sftp_keepalive, sftp_disconnect
 };
+
+/* ---------- SCP (D15): files by scp, the rest by Unix shell commands ---------- */
+
+typedef int (*line_fn)(void *ctx, const char *line);
+
+/* Run script on the server as "sh -c '<script>'" (any login shell takes that),
+   each line of its output to line(), which may stop it by returning nonzero.
+   1 when it exits 0; VFP_STOPPED when line() stopped it; else err holds its
+   first line of errors, or its exit status. */
+static unsigned int run(sftp_remote *r, const char *script, line_fn line, void *ctx)
+{
+    LIBSSH2_CHANNEL *ch;
+    static char buf[16384];
+    char cur[2048], ebuf[512];
+    size_t ql = strlen(script) * 4 + 16;
+    char *cmd = (char *) malloc(ql + 8);
+    int cl = 0, el = 0, stop = 0, code, i;
+    ssize_t got;
+    if (!cmd) { vf_strlcpy(r->base.err, "no memory", sizeof r->base.err); return VFR_FAIL; }
+    memcpy(cmd, "sh -c ", 6);
+    vf_shquote(script, cmd + 6, ql);
+    ch = libssh2_channel_open_session(r->s);
+    if (!ch) { free(cmd); return fail(r, "a command channel"); }
+    if (libssh2_channel_exec(ch, cmd) != 0) { free(cmd); fail(r, "a command"); libssh2_channel_free(ch); return VFR_FAIL; }
+    free(cmd);
+    while (!stop && (got = libssh2_channel_read(ch, buf, sizeof buf)) != 0) {
+        if (got < 0) { fail(r, "a command's output"); libssh2_channel_free(ch); return VFR_FAIL; }
+        for (i = 0; i < (int) got && !stop; i++) {
+            if (buf[i] == '\n') {
+                cur[cl] = '\0';
+                if (line) stop = line(ctx, cur);
+                cl = 0;
+            } else if (buf[i] != '\r' && cl < (int) sizeof cur - 1) cur[cl++] = buf[i];
+        }
+    }
+    if (!stop && cl && line) { cur[cl] = '\0'; stop = line(ctx, cur); }
+    while (!stop && el < (int) sizeof ebuf - 1
+           && (got = libssh2_channel_read_stderr(ch, ebuf + el, sizeof ebuf - 1 - (size_t) el)) > 0)
+        el += (int) got;
+    ebuf[el] = '\0';
+    libssh2_channel_close(ch);
+    if (!stop) libssh2_channel_wait_closed(ch);
+    code = libssh2_channel_get_exit_status(ch);
+    libssh2_channel_free(ch);
+    if (stop) return VFP_STOPPED;
+    if (code != 0 || r->bye[0]) {
+        char *nl = strchr(ebuf, '\n');
+        if (nl) *nl = '\0';
+        if (r->bye[0]) fail(r, "");
+        else if (ebuf[0]) vf_strlcpy(r->base.err, ebuf, sizeof r->base.err);
+        else snprintf(r->base.err, sizeof r->base.err, "the command ended with status %d", code);
+        return VFR_FAIL;
+    }
+    return 1;
+}
+
+/* A script from tmpl with each %1 and %2 replaced by a1 and a2 quoted for sh;
+   malloc'd, 0 if there is no memory. */
+static char *script(const char *tmpl, const char *a1, const char *a2)
+{
+    size_t n = strlen(tmpl) + 1, q1 = a1 ? strlen(a1) * 4 + 3 : 0, q2 = a2 ? strlen(a2) * 4 + 3 : 0;
+    const char *t;
+    char *out, *o;
+    for (t = tmpl; *t; t++) if (t[0] == '%' && (t[1] == '1' || t[1] == '2')) n += t[1] == '1' ? q1 : q2;
+    out = (char *) malloc(n);
+    if (!out) return 0;
+    for (o = out, t = tmpl; *t; t++) {
+        if (t[0] == '%' && (t[1] == '1' || t[1] == '2')) {
+            vf_shquote(t[1] == '1' ? a1 : a2, o, t[1] == '1' ? q1 : q2);
+            o += strlen(o);
+            t++;
+        } else *o++ = *t;
+    }
+    *o = '\0';
+    return out;
+}
+
+static unsigned int run2(sftp_remote *r, const char *tmpl, const char *a1, const char *a2, line_fn line, void *ctx)
+{
+    char *sc = script(tmpl, a1, a2);
+    unsigned int st;
+    if (!sc) { vf_strlcpy(r->base.err, "no memory", sizeof r->base.err); return VFR_FAIL; }
+    st = run(r, sc, line, ctx);
+    free(sc);
+    return st;
+}
+
+static int first_line(void *ctx, const char *line)
+{
+    char *out = (char *) ctx;
+    if (!out[0]) vf_strlcpy(out, line, 1024);
+    return 0;
+}
+
+/* After the login: is there a Unix shell? VMS sshd's DCL has no sh (N17). */
+static unsigned int start_scp(sftp_remote *r)
+{
+    char got[1024];
+    unsigned int st;
+    got[0] = '\0';
+    st = run(r, "printf 'VFTP-%s\\n' UNIX", first_line, got);
+    if (!(st & 1) || strcmp(got, "VFTP-UNIX")) {
+        snprintf(r->base.err, sizeof r->base.err, "this server has no Unix shell, which SCP needs to list "
+                 "and manage files: use SFTP");
+        return VFR_FAIL;
+    }
+    return 1;
+}
+
+static unsigned int scp_realpath(vf_remote *rr, const char *path, char *out, int size)
+{
+    sftp_remote *r = (sftp_remote *) rr;
+    char got[1024];
+    unsigned int st;
+    got[0] = '\0';
+    st = run2(r, "cd -- %1 && pwd -P", path, 0, first_line, got);
+    if (!(st & 1)) return st;
+    if (got[0] != '/') { snprintf(r->base.err, sizeof r->base.err, "%s: no directory from pwd", path); return VFR_FAIL; }
+    vf_strlcpy(out, got, (size_t) size);
+    return 1;
+}
+
+/* "ls -la" lines, then after a marker the links that lead to directories */
+#define DIRLINKS "//VFTP-DIRLINKS"
+typedef struct {
+    vf_ftp_list l;
+    vf_entry *e;
+    int n, cap, links, full;
+} lsctx;
+
+static int ls_add(lsctx *c, const vf_entry *e)
+{
+    if (c->n == c->cap) {
+        int cap = c->cap ? c->cap * 2 : 64;
+        vf_entry *ne = (vf_entry *) realloc(c->e, (size_t) cap * sizeof *ne);
+        if (!ne) { c->full = 1; return 1; }
+        c->e = ne; c->cap = cap;
+    }
+    c->e[c->n++] = *e;
+    return 0;
+}
+
+static int ls_line(void *ctx, const char *line)
+{
+    lsctx *c = (lsctx *) ctx;
+    vf_entry e;
+    int i;
+    if (c->links) {
+        for (i = 0; i < c->n; i++) if (c->e[i].is_link && !strcmp(c->e[i].name, line)) c->e[i].is_dir = 1;
+        return 0;
+    }
+    if (!strcmp(line, DIRLINKS)) {
+        if (vf_ftp_list_end(&c->l, &e)) ls_add(c, &e);
+        c->links = 1;
+        return 0;
+    }
+    if (vf_ftp_list_line(&c->l, line, &e) && ls_add(c, &e)) return 1;
+    while (vf_ftp_list_more(&c->l, &e)) if (ls_add(c, &e)) return 1;
+    return 0;
+}
+
+static unsigned int scp_list(vf_remote *rr, const char *dir, vfr_entry_cb cb, void *ctx)
+{
+    sftp_remote *r = (sftp_remote *) rr;
+    lsctx c;
+    vf_when now;
+    unsigned int st;
+    int i;
+    memset(&c, 0, sizeof c);
+    vfp_now(&now);
+    vf_ftp_list_init(&c.l, now.y, now.m);
+    st = run2(r, "cd -- %1 || exit 1; LC_ALL=C ls -la || exit 1; echo '" DIRLINKS "'; "
+                 "for f in .* *; do [ -L \"$f\" ] && [ -d \"$f\" ] && printf '%s\\n' \"$f\"; done; exit 0",
+              dir, 0, ls_line, &c);
+    if (c.full) { free(c.e); vf_strlcpy(r->base.err, "no memory for the listing", sizeof r->base.err); return VFR_FAIL; }
+    if (!(st & 1)) { free(c.e); return st; }
+    for (i = 0; i < c.n; i++) if (cb(ctx, &c.e[i])) { free(c.e); return VFP_STOPPED; }
+    free(c.e);
+    return 1;
+}
+
+typedef struct { vf_ftp_list l; vf_entry e; int got, dir; } statctx;
+
+static int stat_line(void *ctx, const char *line)
+{
+    statctx *c = (statctx *) ctx;
+    if (!strcmp(line, "//VFTP-DIR")) c->dir = 1;
+    else if (!c->got) c->got = vf_ftp_list_line(&c->l, line, &c->e);
+    return 0;
+}
+
+static unsigned int scp_stat(vf_remote *rr, const char *path, vf_entry *e)
+{
+    sftp_remote *r = (sftp_remote *) rr;
+    statctx c;
+    vf_when now;
+    unsigned int st;
+    const char *base = strrchr(path, '/');
+    memset(&c, 0, sizeof c);
+    vfp_now(&now);
+    vf_ftp_list_init(&c.l, now.y, now.m);
+    st = run2(r, "LC_ALL=C ls -ld -- %1 || exit 1; [ -d %1 ] && echo //VFTP-DIR; exit 0", path, 0, stat_line, &c);
+    if (!(st & 1)) return st;
+    if (!c.got) { snprintf(r->base.err, sizeof r->base.err, "%s: ls -ld gave nothing VFTP can read", path); return VFR_FAIL; }
+    *e = c.e;
+    vf_strlcpy(e->name, base && base[1] ? base + 1 : path, sizeof e->name);
+    if (c.dir) e->is_dir = 1;
+    return 1;
+}
+
+static unsigned int scp_mkdir(vf_remote *rr, const char *path)
+{ return run2((sftp_remote *) rr, "mkdir -- %1", path, 0, 0, 0); }
+static unsigned int scp_rmdir(vf_remote *rr, const char *path)
+{ return run2((sftp_remote *) rr, "rmdir -- %1", path, 0, 0, 0); }
+static unsigned int scp_unlink(vf_remote *rr, const char *path)
+{ return run2((sftp_remote *) rr, "rm -- %1", path, 0, 0, 0); }
+
+static unsigned int scp_rename(vf_remote *rr, const char *from, const char *to)
+{
+    /* never replaces: as SFTP's rename */
+    return run2((sftp_remote *) rr, "if [ -e %2 ] || [ -L %2 ]; then echo 'there is one already: '%2 >&2; "
+                "exit 1; fi; mv -- %1 %2", from, to, 0, 0);
+}
+
+static unsigned int scp_replace(vf_remote *rr, const char *from, const char *to)
+{ return run2((sftp_remote *) rr, "mv -f -- %1 %2", from, to, 0, 0); }
+
+static unsigned int scp_chmod(vf_remote *rr, const char *path, unsigned int mode)
+{
+    char tmpl[32];
+    snprintf(tmpl, sizeof tmpl, "chmod %o -- %%1", mode & 07777);
+    return run2((sftp_remote *) rr, tmpl, path, 0, 0, 0);
+}
+
+typedef struct {
+    vfr_file base;
+    sftp_remote *r;
+    LIBSSH2_CHANNEL *ch;
+    unsigned long long size, done;
+    int writing;
+} scp_file;
+
+static unsigned int scp_open_read(vf_remote *rr, const char *path, int text, vfr_file **out)
+{
+    sftp_remote *r = (sftp_remote *) rr;
+    libssh2_struct_stat sb;
+    scp_file *f;
+    LIBSSH2_CHANNEL *ch;
+    (void) text;                                        /* bytes, as SFTP */
+    memset(&sb, 0, sizeof sb);
+    ch = libssh2_scp_recv2(r->s, path, &sb);
+    if (!ch) return fail(r, path);
+    f = (scp_file *) calloc(1, sizeof *f);
+    if (!f) { libssh2_channel_free(ch); vf_strlcpy(r->base.err, "no memory", sizeof r->base.err); return VFR_FAIL; }
+    f->base.r = rr; f->r = r; f->ch = ch;
+    f->size = (unsigned long long) sb.st_size;
+    *out = &f->base;
+    return 1;
+}
+
+static unsigned int scp_read(vfr_file *ff, char *buf, int size, int *got)
+{
+    scp_file *f = (scp_file *) ff;
+    unsigned long long left = f->size - f->done;
+    ssize_t n;
+    *got = 0;
+    if (!left) return 1;
+    if ((unsigned long long) size > left) size = (int) left;
+    n = libssh2_channel_read(f->ch, buf, (size_t) size);
+    if (n < 0) return fail(f->r, "read");
+    if (n == 0) { snprintf(f->r->base.err, sizeof f->r->base.err, "the file ended after %llu of %llu bytes", f->done, f->size); return VFR_FAIL; }
+    f->done += (unsigned long long) n;
+    *got = (int) n;
+    return 1;
+}
+
+static unsigned int scp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size, vfr_file **out)
+{
+    sftp_remote *r = (sftp_remote *) rr;
+    scp_file *f;
+    LIBSSH2_CHANNEL *ch;
+    (void) text;
+    ch = libssh2_scp_send64(r->s, path, 0644, (libssh2_int64_t) size, 0, 0);
+    if (!ch) return fail(r, path);
+    f = (scp_file *) calloc(1, sizeof *f);
+    if (!f) { libssh2_channel_free(ch); vf_strlcpy(r->base.err, "no memory", sizeof r->base.err); return VFR_FAIL; }
+    f->base.r = rr; f->r = r; f->ch = ch; f->writing = 1;
+    f->size = size;
+    *out = &f->base;
+    return 1;
+}
+
+static unsigned int scp_write(vfr_file *ff, const char *buf, int len)
+{
+    scp_file *f = (scp_file *) ff;
+    if (f->done + (unsigned long long) len > f->size) {
+        snprintf(f->r->base.err, sizeof f->r->base.err, "more than the %llu bytes announced", f->size);
+        return VFR_FAIL;
+    }
+    while (len > 0) {
+        ssize_t n = libssh2_channel_write(f->ch, buf, (size_t) len);
+        if (n < 0) return fail(f->r, "write");
+        buf += n; len -= (int) n;
+        f->done += (unsigned long long) n;
+    }
+    return 1;
+}
+
+static unsigned int scp_close(vfr_file *ff)
+{
+    scp_file *f = (scp_file *) ff;
+    sftp_remote *r = f->r;
+    unsigned int st = 1;
+    if (f->writing) {
+        if (f->done != f->size) {
+            /* cut short (cancelled, or failed): the server keeps what it got; the app deletes it */
+            snprintf(r->base.err, sizeof r->base.err, "%llu of %llu bytes sent", f->done, f->size);
+            st = VFR_FAIL;
+        } else if (libssh2_channel_send_eof(f->ch) != 0 || libssh2_channel_wait_eof(f->ch) != 0) {
+            st = fail(r, "close");
+        }
+        if (st & 1) libssh2_channel_wait_closed(f->ch);
+        if ((st & 1) && libssh2_channel_get_exit_status(f->ch) != 0) {
+            snprintf(r->base.err, sizeof r->base.err, "the server's scp ended with status %d",
+                     libssh2_channel_get_exit_status(f->ch));
+            st = VFR_FAIL;
+        }
+    }
+    libssh2_channel_free(f->ch);
+    free(f);
+    return st;
+}
+
+static const vfr_ops scp_ops = {
+    sftp_trust, sftp_methods, sftp_login_password, sftp_login_key, scp_realpath,
+    scp_list, scp_stat, scp_mkdir, scp_rmdir, scp_unlink, scp_rename, scp_replace, scp_chmod,
+    scp_open_read, scp_read, scp_open_write, scp_write, scp_close,
+    sftp_keepalive, sftp_disconnect
+};
+
+unsigned int vfr_scp_connect(const char *host, int port, vf_remote **out, vfr_hostkey *hk,
+                             char *err, int errsz)
+{
+    unsigned int st = vfr_sftp_connect(host, port, out, hk, err, errsz);
+    if (st & 1) {
+        sftp_remote *r = (sftp_remote *) *out;
+        r->scp = 1;
+        r->base.ops = &scp_ops;
+        r->base.need_size = 1;
+    }
+    return st;
+}

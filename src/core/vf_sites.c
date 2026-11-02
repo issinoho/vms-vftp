@@ -118,7 +118,10 @@ void vf_sites_line(vf_sites *t, const char *line)
     if (!(f = field(&t->s[t->cur], p, &size))) { bad(t, "not a key VFTP knows"); return; }
     if (strlen(val) >= size) { bad(t, "too long"); return; }
     if (!vf_strcasecmp(p, "protocol")) {
-        if (vf_strcasecmp(val, "SFTP") && vf_strcasecmp(val, "FTP")) { bad(t, "the protocol is SFTP or FTP"); return; }
+        if (vf_strcasecmp(val, "SFTP") && vf_strcasecmp(val, "FTP") && vf_strcasecmp(val, "SCP")) {
+            bad(t, "the protocol is SFTP, SCP or FTP");
+            return;
+        }
         vf_upper(val);
     }
     if (!vf_strcasecmp(p, "port")) {

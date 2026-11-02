@@ -22,6 +22,10 @@ char *vf_fmt_when(const vf_when *w, char *buf, size_t size);
 int vf_parse_date(const char *s, long *days);
 long vf_days(int y, int m, int d);
 
+/* s as one word for a POSIX shell: in single quotes, each ' as '\'' (SCP's
+   commands, D15). 0 if it does not fit (out is then ""), else 1. */
+int vf_shquote(const char *s, char *out, size_t size);
+
 /* VMS-style wildcard match, case-blind: * any run, % one character. */
 int vf_match(const char *pattern, const char *s);
 

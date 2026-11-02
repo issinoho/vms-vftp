@@ -697,8 +697,9 @@ static unsigned int ftp_open_read(vf_remote *rr, const char *path, int text, vfr
     return open_file(rr, path, text, 0, f);
 }
 
-static unsigned int ftp_open_write(vf_remote *rr, const char *path, int text, vfr_file **f)
+static unsigned int ftp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size, vfr_file **f)
 {
+    (void) size;
     return open_file(rr, path, text, 1, f);
 }
 

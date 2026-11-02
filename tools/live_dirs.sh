@@ -93,6 +93,8 @@ if [ -n "$ftp" ]; then login='LOGIN vftptest@localhost:21 by password$'; else lo
 ok "Sites: \"vftp livesite\" logged in again from it" '[ "$(grep -ac "$login" "$out")" = 2 ]'
 if [ -z "$ftp" ]; then
     ok "a password login by SSH: vftptest@localhost:$PORT" 'grep -aq "LOGIN vftptest@localhost:$PORT by password\$" "$out"'
+    ok "SCP to VMS sshd: refused, no Unix shell (D15)" \
+       'grep -aq "LOGIN [^ ]*@localhost:$PORT by key FAILED: this server has no Unix shell" "$out"'
 fi
 ok "the password is in no output" '! grep -aqF -- "$pass" "$out" "$srv" "$top/out/plat-$node.txt"'
 sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"

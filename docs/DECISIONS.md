@@ -158,3 +158,28 @@ Considered: one line per site with separators (hard to read, and a Unix path may
 have spaces); saving after every connection (sites the user never asked for);
 keeping comments in place (VFTP would have to rewrite the user's file line by
 line; the old version stays on disk anyway).
+
+## D15. SCP: SFTP's session, files by scp, the rest by shell commands (2026-11-02, proposed)
+
+SCP is the third protocol on the Open form (port 22, like SFTP). The connection,
+host key (D7) and login are SFTP's, on the same libssh2 session code. Files go by
+libssh2's scp (`scp -f`, `scp -t` on the server); listing and managing them is done
+as WinSCP's SCP mode does, by commands run on the server, each as
+`sh -c '<script>'` so that the user's login shell does not matter, every name in
+single quotes (`'` as `'\''`):
+- list: `cd -- dir; LC_ALL=C ls -la`, read by the FTP code's Unix LIST parser,
+  then the links that lead to directories (`[ -L f ] && [ -d f ]`); stat
+  `ls -ld`; the directory a path means `cd -- p && pwd -P`;
+- `mkdir`, `rmdir`, `rm`, `mv -f` (a replacing Put's temporary file over the old
+  one, as SFTP's), `chmod` (GOLD A); a rename refuses a name that is there
+  already, as SFTP's does. A command's first line of errors is the message.
+- Unix servers only. After the login VFTP runs `printf 'VFTP-%s\n' UNIX`; a server
+  without a Unix shell (VMS sshd: DCL) is refused, "use SFTP".
+- scp must know a file's size before its first byte, and a text Put's size is
+  only known after its records become LF lines: when the server needs it
+  (`vfr_needs_size`), the app reads the file once to count, then sends it.
+- A Get is bytes, made into records as an SFTP Get's are.
+Considered: SCP to VMS sshd (no shell to list with, and VMS scp is not what Unix
+scp is); the size by a temporary copy in SYS$SCRATCH (twice the disk, and no
+progress while it is sent); listing by SFTP when the server has it (then it is
+SFTP).

@@ -106,3 +106,24 @@ int vf_match(const char *p, const char *s)
         return vf_match(p + 1, s + 1);
     return 0;
 }
+
+int vf_shquote(const char *s, char *out, size_t size)
+{
+    size_t n = 0;
+    if (size < 3) { if (size) out[0] = '\0'; return 0; }
+    out[n++] = '\'';
+    for (; *s; s++) {
+        if (*s == '\'') {
+            if (n + 4 >= size) { out[0] = '\0'; return 0; }
+            memcpy(out + n, "'\\''", 4);
+            n += 4;
+        } else {
+            if (n + 1 >= size) { out[0] = '\0'; return 0; }
+            out[n++] = *s;
+        }
+    }
+    if (n + 2 > size) { out[0] = '\0'; return 0; }
+    out[n++] = '\'';
+    out[n] = '\0';
+    return 1;
+}

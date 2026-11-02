@@ -3,7 +3,7 @@
 │ [-]  (parent directory)               │                                      │
 │ SSH.DIR;1                 <DIR> 21-OCT│ Not connected.                       │
 │ WORK.DIR;1                <DIR> 21-OCT│                                      │
-│ KIT.BCK;1                     3 21-OCT│ O opens a connection (SFTP or FTP).  │
+│ KIT.BCK;1                     3 21-OCT│ O connects: SFTP, SCP or FTP.        │
 │ LOGIN.COM;1                   1 21-OCT│                                      │
 │ NOTES.TXT;2                   1 22-OCT│                                      │
 │                                       │                                      │

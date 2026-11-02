@@ -58,7 +58,7 @@ typedef struct {
 
     /* the connection */
     vf_remote *rem;
-    int proto;                /* VFR_SFTP, VFR_FTP */
+    int proto;                /* VFR_SFTP, VFR_FTP, VFR_SCP */
     int rvms;                 /* the server's paths are VMS specs (vfr_vms_paths) */
     int clear_ok;             /* the user agreed to send this password in clear (D10) */
     char host[256], user[64], banner[128];
@@ -117,5 +117,8 @@ void vf_set_msg(vf_app *a, int err, const char *fmt, ...);
 const char *vf_field_label(int i);
 const char *vf_field_hint(int i);
 const char *vf_xmode_name(int x);
+
+/* "SFTP", "FTP", "SCP" */
+const char *vf_proto_name(int proto);
 
 #endif

@@ -462,6 +462,57 @@ static void test_dirs(void)
     CHECK(!vf_pane_find(&a->pane[PANE_REMOTE], "data")->tagged);
 }
 
+/* SCP (D15): SFTP's login; a Put's size first (the stub refuses one that differs) */
+static void test_scp(void)
+{
+    vf_app *a = &app;
+    const char *d;
+    int len;
+    start(24, 80, 0);
+    key(a, VK_UP);                               /* Host -> Protocol */
+    erase(a); type(a, "ftp"); key(a, VK_DOWN);
+    CHECKS(a->fv[FF_PORT], "21");
+    key(a, VK_UP); erase(a); type(a, "scp"); key(a, VK_DOWN);
+    CHECKS(a->fv[FF_PROTO], "SCP");
+    CHECKS(a->fv[FF_PORT], "22");               /* back with SSH */
+    erase(a); type(a, "test.example");
+    key(a, VK_DOWN); key(a, VK_DOWN); key(a, VK_DOWN);
+    type(a, "secret");
+    key(a, VK_DO); key(a, 'Y');                  /* no D10 question: SSH */
+    CHECK(a->mode == M_MAIN && a->rem && a->proto == VFR_SCP);
+    CHECK(strstr(stub_log(), "LOGIN test@test.example:22 by password") != 0);
+    snap(a, "24_scp_connected");
+
+    /* text: records become LF lines, the size counted first */
+    go(a, PANE_LOCAL, "LOGIN.COM;1");
+    key(a, 'P');
+    d = stub_remote("/home/test/login.com", &len);
+    CHECK(d && len == 23 && !memcmp(d, "$ set noon\n$ show time\n", 23));
+    CHECK(strstr(a->msg, "Put 1 file") != 0);
+    /* binary */
+    go(a, PANE_LOCAL, "KIT.BCK;1");
+    key(a, 'C');
+    d = stub_remote("/home/test/kit.bck", &len);
+    CHECK(d && len == 1536);
+    /* replacing goes by a temporary name and a rename, as SFTP's */
+    go(a, PANE_LOCAL, "LOGIN.COM;1");
+    key(a, 'P'); key(a, 'Y');
+    CHECK(strstr(a->msg, "Put 1 file") != 0);
+    CHECK(!stub_remote("/home/test/login.com.vftp-part", 0));
+    /* Get */
+    go(a, PANE_REMOTE, "notes.txt");
+    key(a, 'G');
+    CHECK(strstr(a->msg, "Got 1 file") != 0);
+
+    /* saved as a site: SCP, with the key file */
+    vf_strlcpy(a->fv[FF_KEY], "STUB$DKA0:[USERS.TEST.SSH]ID_ED25519.", VF_FIELD);
+    key(a, 'L'); key(a, 'A'); erase(a); type(a, "scpsite"); key(a, VK_RETURN);
+    d = stub_local("STUB$DKA0:[USERS.TEST]VFTP.SITES", &len, 0, 0);
+    CHECK(d && strstr(d, "[scpsite]\nprotocol = SCP\n") != 0);
+    CHECK(d && strstr(d, "\nkey = STUB$DKA0:[USERS.TEST.SSH]ID_ED25519.\n") != 0 && !strstr(d, "secret"));
+    key(a, VK_F10);
+}
+
 /* The sites file (D9, D14) */
 static void test_sites(void)
 {
@@ -584,6 +635,7 @@ int main(void)
     test_dirs();
     test_sites();
     test_chmod();
+    test_scp();
     test_screens();
     vf_app_free(&app);
     printf("test_app: %d checks, %d failed\n", checks, fails);
