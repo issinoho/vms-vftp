@@ -758,6 +758,8 @@ typedef struct {
     int writing;
 } scp_file;
 
+/* libssh2_struct_stat is struct stat: build_vms.com compiles this file with
+   libssh2's _USE_STD_STAT and _LARGEFILE, or scp_recv2 writes past sb. */
 static unsigned int scp_open_read(vf_remote *rr, const char *path, int text, vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
@@ -834,7 +836,8 @@ static unsigned int scp_close(vfr_file *ff)
             /* cut short (cancelled, or failed): the server keeps what it got; the app deletes it */
             snprintf(r->base.err, sizeof r->base.err, "%llu of %llu bytes sent", f->done, f->size);
             st = VFR_FAIL;
-        } else if (libssh2_channel_send_eof(f->ch) != 0 || libssh2_channel_wait_eof(f->ch) != 0) {
+        } else if (libssh2_channel_write(f->ch, "", 1) != 1      /* scp's "file sent, all well" */
+                   || libssh2_channel_send_eof(f->ch) != 0 || libssh2_channel_wait_eof(f->ch) != 0) {
             st = fail(r, "close");
         }
         if (st & 1) libssh2_channel_wait_closed(f->ch);

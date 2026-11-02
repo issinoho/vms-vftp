@@ -45,7 +45,8 @@ $   if $severity .ne. 1 then goto failed
 $   i = i + 1
 $   goto app_loop
 $ app_done:
-$ cc'cflags'/object=[.build]vf_sftp.obj [.src.net]vf_sftp.c
+$! libssh2 is built with these (vms-libssh2): scp's struct stat must be the same
+$ cc'cflags'/DEFINE=(_USE_STD_STAT=1,_LARGEFILE)/object=[.build]vf_sftp.obj [.src.net]vf_sftp.c
 $ if $severity .ne. 1 then goto failed
 $ cc'cflags'/object=[.build]vf_ftp.obj [.src.net]vf_ftp.c
 $ if $severity .ne. 1 then goto failed
