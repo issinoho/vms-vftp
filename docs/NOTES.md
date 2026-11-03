@@ -393,3 +393,36 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
   A fixed-512 block-I/O file of 2 blocks, opened again by $OPEN (PUT, BIO) and
   written at VBN 3 and 4, beyond what was allocated: 4 blocks, its records A B C D,
   the end of file after block 4. The same on x86 and IA64.
+
+## N20. Resume live on both nodes (2026-11-03, tools/live.sh, live_unix.sh, live_unix_ftp.sh)
+
+- Each live script now cancels a Get and a Put of the 10 MB big.bin, then does
+  them again: the next Get goes on from its half file (Return), the next Put goes
+  on (VMS sshd) or is started again with N and replaces with Y (Unix servers).
+- live.sh (VMS sshd, the node to itself), all 6 resume checks on both: the Put
+  resumed from 917504 bytes on x86 and 720896 on IA64 into big.bin.vftp-part,
+  then renamed into a new version big.bin;2 equal to the local BIG.BIN;1; the Get
+  resumed from 3599872 and 32768 bytes into BIG.BIN_VFTP-PART, renamed into a new
+  version equal to the server's big.bin;1; no half file left on either side.
+- live_unix.sh to OpenSSH on Linux: every check on both nodes, the resume ones
+  among them (the Get resumed byte for byte, the Put's half deleted by N, big.bin
+  never opened to write). With --scp: every check on both; SCP keeps no half
+  file and resumes nothing.
+- live_unix_ftp.sh to pyftpdlib (FEAT lists REST STREAM): every check on both
+  nodes, plain and --tls; the resumed Get sends `REST n` before RETR (the server's
+  log), the Put's half deleted by N.
+- live_ftp.sh (the nodes' own FTP servers, no REST): all 7 on both, as before.
+  live_dirs.sh, SFTP and --ftp: all on both.
+- Three failures along the way, all in the test scripts:
+  - PTYDRIVE takes a wait over 30 s as 1.5 s (ptydrive.c), so 40 s waits typed
+    the next keys during the transfer, where they are dropped. The VFTP log is
+    stamped to the second now, which showed it. Waits are at most 30 s; a line
+    with no keys only waits, and one follows each resumed 10 MB transfer.
+  - x86's resumed Put over SFTP to Linux took 36.4 s, past one 30 s wait: fixed
+    by the wait line above.
+  - On IA64 FTP a cancelled Get stopped 4.4 s after Ctrl/C (pyftpdlib's log:
+    RETR at 06.56, the data connection closed at 11.33), past the 4 s step.
+    probes/probe_alloc.c: a block-I/O create with ALQ 20481 (a 10 MB Get's local
+    file) takes 2.0-2.3 s on IA64, 0.03 s with no allocation; under 0.01 s either
+    way on x86. No key is read during the open. The cancel step waits 8 s now.
+- live_unix.sh and live_unix_ftp.sh printed FAILED but exited 0; they exit 1 now.

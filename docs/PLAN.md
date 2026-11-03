@@ -137,8 +137,12 @@ SFTP to both nodes, refused on a VMS FTP server (N16).
 From Phase 1: F5 copies and Backspace goes up, live on both nodes; a password
 login by SSH as VFTPTEST is part of live_dirs.sh, passing on both (N17).
 Status 2026-11-02: SCP (D15): live from both nodes against OpenSSH on
-Linux through a command gate, and refused by VMS sshd (N18). Left: resume (how it
-fits D8 to be decided).
+Linux through a command gate, and refused by VMS sshd (N18).
+Status 2026-11-03: resume (D16, proposed): a binary Get or Put goes through a half
+file, kept when it does not finish and asked about next time; SFTP by offset, FTP by
+REST where FEAT lists REST STREAM, SCP and text start again. Live on both nodes to
+VMS sshd, OpenSSH, pyftpdlib (plain and TLS), with SCP keeping no half file (N20).
+Left: D16 to be confirmed, then the Phase 3 exit.
 
 ## Phase 4: kits and release
 
