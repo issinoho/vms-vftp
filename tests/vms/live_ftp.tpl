@@ -24,7 +24,7 @@
 5 logged in | \x17
 2 remote down | \e[B
 0.3 get big | g
-4 cancel get | \x03
+8 cancel get | \x03
 2 remote down1 | \e[B
 6 get bin | g
 2 remote down2 | \e[B

@@ -26,7 +26,7 @@
 3 remote attributes | a
 2 remote attributes back | \x20
 1 get big | g
-4 cancel get | \x03
+8 cancel get | \x03
 2 remote down1 | \e[B
 6 get bin | g
 2 remote down2 | \e[B

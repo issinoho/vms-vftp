@@ -35,7 +35,7 @@
 8 trust | y
 2 remote down | \e[B
 1 get big | g
-4 cancel get | \x03
+8 cancel get | \x03
 2 remote down1 | \e[B
 6 get bin | g
 2 remote down2 | \e[B
