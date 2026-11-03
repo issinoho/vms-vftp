@@ -154,9 +154,11 @@ statically (D3), so VFTP's kit needs only SSL3. Kits via `tools/kit.sh`,
 Status 2026-11-03: the vms-libssh2 kit (1.11.1-vms1) built on both nodes, installed,
 checked with a smoke test built against it, and removed. VFTP 0.1.0 (T0.1-0) kits
 built, installed on both nodes and left installed; the installed image starts,
-shows help and reports its version (N21). Left: the GitHub repositories and
-releases (vms-libssh2 first), SYSTARTUP and SYLOGIN on the nodes (vms-site-config),
-both the user's to start.
+shows help and reports its version (N21). vms-libssh2 is on GitHub and released
+(v1.11.1-vms1, the two kits and SHA256SUMS, the downloads checked against them).
+Before VFTP's first push its history was rewritten to take out two LAN addresses
+(test strings and NOTES, now 192.0.2.x). Left: VFTP's repository and v0.1.0 release,
+SYSTARTUP and SYLOGIN on the nodes (vms-site-config).
 
 ## Later ideas
 
