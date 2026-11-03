@@ -78,7 +78,9 @@ static void draw_bottom(vf_app *a, const char *l1label, const char *l1, const ch
 /* ---------- the panes ---------- */
 
 /* A frame title on the top line: " LOCAL DKA0:[IAIN] ", cut from the left so the
-   end of a long directory shows. */
+   end of a long directory shows. The pane in use has its title in the highlight
+   bar's reverse video (black on cyan), the other in yellow. Bold and reverse
+   together would be the error line's white on red. */
 static void pane_title(vf_app *a, int which, int c1, int c2)
 {
     vf_screen *s = &a->scr;
@@ -95,7 +97,7 @@ static void pane_title(vf_app *a, int which, int c1, int c2)
                  dir + strlen(dir) - (size_t) (room - 14 > 0 ? room - 14 : 0));
         vf_strlcpy(t, cut, sizeof t);
     }
-    vf_put(s, 1, c1 + 1, t, a->act == which ? (VF_A_BOLD | VF_A_REV) : VF_A_BOLD, room);
+    vf_put(s, 1, c1 + 1, t, a->act == which ? VF_A_REV : VF_A_BOLD, room);
 }
 
 static void draw_pane(vf_app *a, int which, int r1, int r2, int c1, int c2)

@@ -2,8 +2,8 @@
 #ifndef VF_TYPES_H
 #define VF_TYPES_H
 
-#define VF_VERSION "0.1.0"
-#define VF_PCSI_VERSION "T0.1-0"
+#define VF_VERSION "0.1.1"
+#define VF_PCSI_VERSION "T0.1-1"
 
 #define VF_SPEC_MAX 1024     /* a file specification, or one edited line */
 

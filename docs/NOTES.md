@@ -454,3 +454,19 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
 - build_vms.com uses LIBSSH2$ROOT:[000000] when no libssh2 tree is given and
   VFTP_LIBSSH2 is not defined: a build from source needs only the libssh2 kit.
   Not yet tried with the kit installed (it was removed after its check).
+
+## N22. 0.1.1: the active pane's title colour (2026-11-03, tools/banner.sh, tools/kit.sh)
+
+- The README banner (tools/banner.sh, the app against the stubs) showed the
+  title of the pane in use in bright white on red: vf_draw gave it bold and
+  reverse, which vf_ansi maps to the error line's colours. So since Phase 1;
+  the snapshots hold only text, so no test saw it.
+- Now reverse alone: black on cyan, the highlight bar's colours (as VTREE marks
+  the window in use); the other pane's title stays yellow; reverse video without
+  colour. test_app's test_title_colours checks the SGR of both titles before and
+  after Tab, and in MONO (247 checks); it failed on the old code.
+- 0.1.1 (PCSI T0.1-1): @build_vms TEST on both nodes (172, 45, 247 checks, none
+  failed); kits built; PRODUCT INSTALL upgraded 0.1.0 in place on both
+  (%PCSI-I-FORCEDUPG, T0.1-0 implicitly removed); test_installed.com showed the
+  Open form and "VFTP 0.1.1 help", and the transcript has the LOCAL title in
+  ESC[0;36;40;7m and no red on either node.

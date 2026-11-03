@@ -8,6 +8,7 @@
 #include "vf_app.h"
 #include "vf_stub.h"
 #include "vf_util.h"
+#include "vf_ansi.h"
 
 static int checks, fails;
 static const char *snapdir = "tests/snap";
@@ -390,6 +391,29 @@ static void test_screens(void)
     snap(a, "15_wide");
 }
 
+/* The active pane's title in colour: the highlight bar's black on cyan, not the
+   error line's white on red; the other pane's in yellow (VTREE marks the window
+   in use the same way). Snapshots hold only the text, so this checks the SGR. */
+static void test_title_colours(void)
+{
+    vf_app *a = &app;
+    const char *bar = "0;36;40;7", *key_ = "0;1;33;44";
+    int lcol = 2, rcol;
+    start(24, 80, "test@test.example");
+    type(a, "secret"); key(a, VK_DO); key(a, 'Y');
+    for (rcol = 0; rcol < 74; rcol++)
+        if (vf_at(&a->scr, 1, rcol)->ch == 'R' && vf_at(&a->scr, 1, rcol + 1)->ch == 'E'
+            && vf_at(&a->scr, 1, rcol + 2)->ch == 'M') break;
+    CHECK(rcol < 80 && a->act == PANE_REMOTE);
+    CHECKS(vf_ansi_sgr(vf_at(&a->scr, 1, rcol), 1), bar);
+    CHECKS(vf_ansi_sgr(vf_at(&a->scr, 1, lcol), 1), key_);
+    key(a, VK_TAB);
+    CHECK(a->act == PANE_LOCAL);
+    CHECKS(vf_ansi_sgr(vf_at(&a->scr, 1, lcol), 1), bar);
+    CHECKS(vf_ansi_sgr(vf_at(&a->scr, 1, rcol), 1), key_);
+    CHECKS(vf_ansi_sgr(vf_at(&a->scr, 1, lcol), 0), "0;7");   /* no colour: reverse */
+}
+
 /* Directories go across whole (D13) */
 static void test_dirs(void)
 {
@@ -759,6 +783,7 @@ int main(void)
     test_resume();
     test_resume_ftp();
     test_screens();
+    test_title_colours();
     vf_app_free(&app);
     printf("test_app: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;

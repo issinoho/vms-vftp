@@ -25,7 +25,7 @@ family.
   and type), a saved-sites list, a server's permissions (`644`, `go-w`), and resume of
   an interrupted binary transfer (SFTP, and FTP where the server has `REST`).
 
-**Status: 0.1.0, an early test release.** Tested end to end on x86-64 (E9.2-4) and
+**Status: 0.1.1, an early test release.** Tested end to end on x86-64 (E9.2-4) and
 IA64 (V8.4-2L3) against VMS sshd and the TCP/IP Services FTP server, and against
 OpenSSH and an FTP/FTPS server on Linux. See [docs/PLAN.md](docs/PLAN.md).
 
@@ -35,7 +35,7 @@ VFTP needs VSI's SSL3 kit (V3.0 or later). libssh2 is linked into the image, so 
 is not needed to run VFTP. A kit downloaded through a non-VMS system loses its record
 format. Restore it, then install:
 
-    $ SET FILE/ATTRIBUTE=(RFM:FIX,LRL:8192,MRS:8192,RAT:NONE) ISSINOHO-*-VFTP-T0001-0-1.PCSI
+    $ SET FILE/ATTRIBUTE=(RFM:FIX,LRL:8192,MRS:8192,RAT:NONE) ISSINOHO-*-VFTP-T0001-1-1.PCSI
     $ PRODUCT INSTALL VFTP /PRODUCER=ISSINOHO /SOURCE=dev:[dir]
 
 Add `@SYS$STARTUP:VFTP$STARTUP.COM` to `SYS$MANAGER:SYSTARTUP_VMS.COM` to define the
