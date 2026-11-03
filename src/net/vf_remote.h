@@ -73,6 +73,13 @@ unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got);
    first (SCP); otherwise a guess or 0. */
 unsigned int vfr_open_write(vf_remote *r, const char *path, int text, unsigned long long size, vfr_file **f);
 int vfr_needs_size(vf_remote *r);
+/* Can a binary transfer start part way (D16)? SFTP yes; FTP when the server's FEAT
+   names REST STREAM; SCP no. */
+int vfr_can_resume(vf_remote *r);
+/* Binary, from byte offset on (only where vfr_can_resume): a read skips the bytes
+   before it; a write keeps them and adds what follows. */
+unsigned int vfr_open_read_at(vf_remote *r, const char *path, unsigned long long offset, vfr_file **f);
+unsigned int vfr_open_write_at(vf_remote *r, const char *path, unsigned long long offset, vfr_file **f);
 unsigned int vfr_write(vfr_file *f, const char *buf, int len);
 unsigned int vfr_close(vfr_file *f);
 

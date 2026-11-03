@@ -543,15 +543,21 @@ unsigned int vfp_delete(const char *spec)
     return st;
 }
 
-unsigned int vfp_rename(const char *from, const char *to)
+unsigned int vfp_rename(const char *from, const char *to, char *result, int rsize)
 {
     static char oesa[NAML$C_MAXRSS + 1], orsa[NAML$C_MAXRSS + 1];
     static char nesa[NAML$C_MAXRSS + 1], nrsa[NAML$C_MAXRSS + 1];
     struct FAB of, nf;
     struct NAML on, nn;
+    unsigned int st;
     naml_setup(&of, &on, from, oesa, orsa);
     naml_setup(&nf, &nn, to, nesa, nrsa);
-    return sys$rename(&of, 0, 0, &nf);
+    st = sys$rename(&of, 0, 0, &nf);
+    if (result) {
+        nrsa[(st & 1) ? nn.naml$l_long_result_size : 0] = '\0';
+        vf_strlcpy(result, (st & 1) && nrsa[0] ? nrsa : to, (size_t) rsize);
+    }
+    return st;
 }
 
 /* ---------- transfers ---------- */
@@ -568,7 +574,7 @@ struct vfp_file {
     int writing, text, binary_fix;
     /* binary: a block buffer and the file's exact length */
     char buf[BLOCKS * 512];
-    int blen, bpos;
+    int blen, bpos, skip;    /* skip: bytes of the first block read not handed out */
     unsigned int vbn;
     unsigned long long total, length;
 };
@@ -627,16 +633,29 @@ unsigned int vfp_read(vfp_file *f, char *buf, int size, int *got)
         if (st == RMS$_EOF) return VFP_EOF;
         if (!(st & 1)) return st;
         f->blen = f->rab.rab$w_rsz;
-        f->bpos = 0;
+        f->bpos = f->skip;
+        f->skip = 0;
         f->vbn += (unsigned int) ((f->blen + 511) / 512);
         if (f->total + (unsigned long long) f->blen > f->length && f->length)
             f->blen = (int) (f->length - f->total);
         if (f->blen <= 0) return VFP_EOF;
         f->total += (unsigned long long) f->blen;
     }
+    if (f->bpos >= f->blen) return vfp_read(f, buf, size, got);   /* skipped to the block's end */
     *got = f->blen - f->bpos < size ? f->blen - f->bpos : size;
     memcpy(buf, f->buf + f->bpos, (size_t) *got);
     f->bpos += *got;
+    return SS$_NORMAL;
+}
+
+unsigned int vfp_skip(vfp_file *f, unsigned long long offset)
+{
+    if (f->text || f->writing) return SS$_BADPARAM;
+    if (offset >= f->length) offset = f->length;
+    f->vbn = (unsigned int) (offset / 512) + 1;
+    f->total = offset / 512 * 512;           /* the bytes before the block read next */
+    f->skip = (int) (offset % 512);
+    f->blen = f->bpos = 0;
     return SS$_NORMAL;
 }
 
@@ -679,6 +698,41 @@ unsigned int vfp_open_write(const char *spec, int text, unsigned long long expec
     f->vbn = 1;
     st = sys$connect(&f->rab, 0, 0);
     if (!(st & 1)) { sys$close(&f->fab, 0, 0); erase(f->spec); free(f); return st; }
+    *out = f;
+    return SS$_NORMAL;
+}
+
+unsigned int vfp_open_resume(const char *spec, unsigned long long expected, unsigned long long *have,
+                             vfp_file **out, char *result, int rsize)
+{
+    vfp_file *f = (vfp_file *) calloc(1, sizeof *f);
+    unsigned int st;
+    if (!f) return SS$_INSFMEM;
+    vf_strlcpy(f->spec, spec, sizeof f->spec);
+    naml_setup(&f->fab, &f->naml, f->spec, f->esa, f->rsa);
+    f->fhc = cc$rms_xabfhc;
+    f->fab.fab$l_xab = (void *) &f->fhc;
+    f->writing = 1;
+    f->fab.fab$b_fac = FAB$M_PUT | FAB$M_BIO;  /* written on past its end (N19) */
+    f->fab.fab$l_fop = FAB$M_TEF;
+    f->fab.fab$w_deq = 64;
+    f->fab.fab$b_shr = FAB$M_NIL;
+    st = sys$open(&f->fab, 0, 0);
+    if (!(st & 1)) { free(f); return st; }
+    f->rsa[f->naml.naml$l_long_result_size] = '\0';
+    vf_strlcpy(f->spec, f->rsa, sizeof f->spec);
+    vf_strlcpy(result, f->rsa, (size_t) rsize);
+    f->binary_fix = expected % 512 == 0;
+    /* the whole blocks: a last part block (none is kept so) is written again */
+    f->vbn = f->fhc.xab$l_ebk > 0 ? f->fhc.xab$l_ebk : 1;
+    f->total = (unsigned long long) (f->vbn - 1) * 512;
+    *have = f->total;
+    f->rab = cc$rms_rab;
+    f->rab.rab$l_fab = &f->fab;
+    f->rab.rab$b_rac = RAB$C_SEQ;
+    f->rab.rab$l_rop = RAB$M_BIO;
+    st = sys$connect(&f->rab, 0, 0);
+    if (!(st & 1)) { sys$close(&f->fab, 0, 0); free(f); return st; }
     *out = f;
     return SS$_NORMAL;
 }
@@ -766,12 +820,19 @@ static unsigned int set_eof(const char *spec, unsigned long long total, int fix)
 unsigned int vfp_close(vfp_file *f, int keep)
 {
     unsigned int st = SS$_NORMAL, cs;
-    if (f->writing && !f->text && keep) st = flush_blocks(f, 1);
+    int part = keep == VFP_KEEP_PART && f->writing && !f->text;
+    if (keep == VFP_KEEP_PART && !part) keep = 0;
+    if (part) {
+        st = flush_blocks(f, 0);                  /* the whole blocks only */
+        f->total = (unsigned long long) (f->vbn - 1) * 512;
+        if (!f->total) keep = 0;
+    } else if (f->writing && !f->text && keep) st = flush_blocks(f, 1);
     sys$disconnect(&f->rab, 0, 0);
     cs = sys$close(&f->fab, 0, 0);
     if ((st & 1) && !(cs & 1)) st = cs;
     if (f->writing) {
-        if (keep && (st & 1) && !f->text && (f->total % 512 || !f->binary_fix))
+        if (part && keep && (st & 1)) st = set_eof(f->spec, f->total, 1);
+        else if (keep && (st & 1) && !f->text && (f->total % 512 || !f->binary_fix))
             st = set_eof(f->spec, f->total, f->binary_fix);
         if (!keep || !(st & 1)) erase(f->spec);   /* nothing half-written is left */
     }

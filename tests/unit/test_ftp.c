@@ -36,6 +36,11 @@ static void test_reply(void)
     CHECK(!vf_ftp_reply_line(&r, " PBSZ."));
     CHECK(vf_ftp_reply_line(&r, "211 END."));
     CHECK(r.code == 211 && strstr(r.text, "AUTH TLS.") != 0);
+    CHECK(!vf_ftp_feat(r.text, "REST STREAM"));
+    CHECK(vf_ftp_feat("Features:\n MDTM\n rest stream\n SIZE\nEnd", "REST STREAM"));
+    CHECK(vf_ftp_feat(" REST STREAM", "REST STREAM"));
+    CHECK(!vf_ftp_feat(" REST", "REST STREAM"));
+    CHECK(!vf_ftp_feat(" REST STREAMING", "REST STREAM"));
     /* a different code inside a multi-line reply does not end it */
     vf_ftp_reply_init(&r);
     vf_ftp_reply_line(&r, "214-The following commands are recognized:");

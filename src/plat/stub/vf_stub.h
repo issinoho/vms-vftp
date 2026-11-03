@@ -18,6 +18,7 @@ void stub_add_remote_link(const char *path);   /* a link to a directory (SFTP li
 void stub_trust(int on);                 /* the server's key in known_hosts or not */
 void stub_change_key(int on);            /* the server's key differs from known_hosts */
 void stub_ftps(int on);                  /* FTP takes AUTH TLS, its certificate not yet known */
+void stub_ftp_rest(int on);              /* FTP has REST (on after a reset), as a Unix server */
 void stub_cancel_after(int reads);       /* F10 arrives after that many polls */
 
 #endif

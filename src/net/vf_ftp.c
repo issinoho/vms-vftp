@@ -47,6 +47,7 @@ typedef struct {
     char listed[VF_SPEC_MAX];/* the directory last listed (VMS: where relative specs start) */
     int type;                /* 'A', 'I', 0 not sent yet */
     int no_epsv;
+    unsigned long long rest; /* the next RETR or STOR starts here (REST, D16); 0 none */
 } ftp_remote;
 
 typedef struct {
@@ -263,6 +264,8 @@ static int start(ftp_remote *r, conn *d, int type, const char *fmt, const char *
 {
     int code;
     char err[200];
+    unsigned long long rest = r->rest;  /* for this command only */
+    r->rest = 0;
     if (!(set_type(r, type) & 1)) return 0;
     if (r->prot && r->c.ssl) {
         /* the control connection's session, which some servers insist on reusing */
@@ -270,6 +273,15 @@ static int start(ftp_remote *r, conn *d, int type, const char *fmt, const char *
         r->sess = SSL_get1_session(r->c.ssl);
     }
     if (!data_conn(r, d)) return 0;
+    if (rest) {                        /* just before RETR or STOR, as RFC 3659 asks */
+        char at[24];
+        snprintf(at, sizeof at, "%llu", rest);
+        if (cmd(r, "REST %s", at) != 350) {
+            c_close(d);
+            fail_rep(r, "REST");
+            return 0;
+        }
+    }
     code = cmd(r, fmt, arg);
     if (code != 150 && code != 125) {
         c_close(d);
@@ -453,6 +465,9 @@ static unsigned int ftp_login_password(vf_remote *rr, const char *user, const ch
         if (cmd(r, "PROT P") / 100 != 2) return fail_rep(r, "PROT P");
         r->prot = 1;
     }
+    /* REST STREAM in FEAT: a binary transfer can start part way (D16); the VMS
+       servers have neither (N8) */
+    if (cmd(r, "FEAT") == 211 && vf_ftp_feat(r->rep.text, "REST STREAM")) r->base.resume = 1;
     /* a VMS server: SYST says so, and PWD gives a VMS spec (N8) */
     cmd(r, "SYST");
     if (r->rep.code == 215 || r->rep.code == 200) {
@@ -676,7 +691,8 @@ static unsigned int ftp_replace(vf_remote *rr, const char *from, const char *to)
 
 /* ---------- files ---------- */
 
-static unsigned int open_file(vf_remote *rr, const char *path, int text, int writing, vfr_file **out)
+static unsigned int open_file(vf_remote *rr, const char *path, int text, int writing,
+                              unsigned long long offset, vfr_file **out)
 {
     ftp_remote *r = (ftp_remote *) rr;
     char dir[VF_SPEC_MAX], name[256];
@@ -684,6 +700,7 @@ static unsigned int open_file(vf_remote *rr, const char *path, int text, int wri
     conn d;
     split(r, path, dir, sizeof dir, name, sizeof name);
     if (!(go(r, dir) & 1)) return VFR_FAIL;
+    r->rest = offset;                                   /* start() sends REST (D16) */
     if (!start(r, &d, text ? 'A' : 'I', writing ? "STOR %s" : "RETR %s", name)) return VFR_FAIL;
     f = (ftp_file *) calloc(1, sizeof *f);
     if (!f) { c_close(&d); reply(r); return failf(r, "no memory"); }
@@ -692,15 +709,17 @@ static unsigned int open_file(vf_remote *rr, const char *path, int text, int wri
     return 1;
 }
 
-static unsigned int ftp_open_read(vf_remote *rr, const char *path, int text, vfr_file **f)
+static unsigned int ftp_open_read(vf_remote *rr, const char *path, int text, unsigned long long offset,
+                                  vfr_file **f)
 {
-    return open_file(rr, path, text, 0, f);
+    return open_file(rr, path, text, 0, offset, f);
 }
 
-static unsigned int ftp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size, vfr_file **f)
+static unsigned int ftp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size,
+                                   unsigned long long offset, vfr_file **f)
 {
     (void) size;
-    return open_file(rr, path, text, 1, f);
+    return open_file(rr, path, text, 1, offset, f);
 }
 
 /* TYPE A: CRLF lines in, LF lines out (a CR not before LF stays) */

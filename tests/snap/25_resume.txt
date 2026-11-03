@@ -1,0 +1,24 @@
+ VFTP  Get: resume                                            25-OCT-2026 10:12
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ A transfer that did not finish left a half file of:                          │
+│                                                                              │
+│   big.bin                                                                    │
+│       19456 of 100000 bytes, the half file of 21-OCT-2026 09:30              │
+│                                                                              │
+│ Y or Return goes on from where each one stopped; N starts them again and     │
+│ deletes the half files; any other key copies nothing. The half files are     │
+│ taken as they are: if a file changed since, say N.                           │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ Resume them? (Y/N) [Y]:
+ CHOOSE  Y or Return resume  N start again  other keys: nothing  Up/Down scroll

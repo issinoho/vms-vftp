@@ -274,12 +274,15 @@ static void test_cancel(void)
         CHECK(strstr(a->msg, "Cancelled") != 0);
         d = stub_remote("/home/test/kit.bck", &len);
         CHECK(d && len == 8 && !memcmp(d, "old copy", 8));
-        CHECK(!stub_remote_like("/home/test/kit.bck."));
-        /* and one that completes replaces it, leaving no temporary file */
-        key(a, 'P'); key(a, 'Y');
+        /* and one that completes replaces it, leaving no temporary file (the half
+           one the cancel kept is the whole file: started again, D16) */
+        key(a, 'P');
+        CHECK(a->mode == M_CONFIRM && a->ask == ASK_REPLACE);
+        key(a, 'Y');
         d = stub_remote("/home/test/kit.bck", &len);
         CHECK(d && len == 1536);
         CHECK(!stub_remote_like("/home/test/kit.bck."));
+        CHECK(strstr(a->msg, "started again") != 0);
     }
 }
 
@@ -625,6 +628,123 @@ static void test_chmod(void)
     CHECK(a->prompt == P_NONE && strstr(a->msg, "SET SECURITY") != 0);
 }
 
+/* Resume (D16): binary transfers through a half file under a temporary name */
+static void test_resume(void)
+{
+    vf_app *a = &app;
+    static char big[100000];
+    const char *d, *half = "STUB$DKA0:[USERS.TEST]BIG.BIN_VFTP-PART";
+    int len, i, vers = 0;
+    char lines[20000];
+    for (i = 0; i < (int) sizeof big; i++) big[i] = (char) ((i * 7) % 253);
+    for (i = 0; i < (int) sizeof lines; i++) lines[i] = i % 50 == 49 ? '\n' : 'a' + i % 26;
+    start(24, 80, "test@test.example");
+    type(a, "secret"); key(a, VK_DO); key(a, 'Y');
+    stub_add_remote("/home/test/big.bin", big, (int) sizeof big);
+    stub_add_remote("/home/test/long.txt", lines, (int) sizeof lines);
+    a->act = PANE_REMOTE; key(a, 'J'); key(a, VK_RETURN);       /* re-read the server */
+
+    /* a cancelled binary Get keeps its whole blocks as BIG.BIN_VFTP-PART, not BIG.BIN */
+    go(a, PANE_REMOTE, "big.bin");
+    stub_cancel_after(40);
+    key(a, 'G');
+    CHECK(strstr(a->msg, "Cancelled") && strstr(a->msg, "half file") && strstr(a->msg, "Get again"));
+    d = stub_local(half, &len, 0, 0);
+    CHECK(d && len > 0 && len < (int) sizeof big && len % 512 == 0 && !memcmp(d, big, (size_t) len));
+    CHECK(!stub_local("STUB$DKA0:[USERS.TEST]BIG.BIN", 0, 0, &vers) && vers == 0);
+    /* the next Get asks, and Return goes on from there */
+    go(a, PANE_REMOTE, "big.bin");
+    key(a, 'G');
+    CHECK(a->mode == M_CONFIRM && a->ask == ASK_RESUME);
+    snap(a, "25_resume");
+    key(a, VK_RETURN);
+    d = stub_local("STUB$DKA0:[USERS.TEST]BIG.BIN", &len, 0, &vers);
+    CHECK(d && len == (int) sizeof big && !memcmp(d, big, sizeof big) && vers == 1);
+    CHECK(!stub_local(half, 0, 0, 0));
+    CHECK(strstr(stub_log(), "GET /home/test/big.bin RESUMED at ") != 0);
+    CHECK(strstr(stub_log(), "-> STUB$DKA0:[USERS.TEST]BIG.BIN;1 BINARY 100000 bytes") != 0);
+    CHECK(strstr(a->msg, "Got 1 file") != 0);
+
+    /* N starts again: the half file goes, the whole file is a new version (D8) */
+    go(a, PANE_REMOTE, "big.bin");
+    stub_cancel_after(40);
+    key(a, 'G');
+    CHECK(stub_local(half, 0, 0, 0) != 0);
+    go(a, PANE_REMOTE, "big.bin");
+    key(a, 'G');
+    CHECK(a->ask == ASK_RESUME);
+    key(a, 'N');
+    d = stub_local("STUB$DKA0:[USERS.TEST]BIG.BIN", &len, 0, &vers);
+    CHECK(d && len == (int) sizeof big && !memcmp(d, big, sizeof big) && vers == 2);
+    CHECK(!stub_local(half, 0, 0, 0));
+    CHECK(strstr(stub_log(), "(a half file, started again)") != 0);
+
+    /* any other key copies nothing and leaves the half file */
+    go(a, PANE_REMOTE, "big.bin");
+    stub_cancel_after(40);
+    key(a, 'G');
+    go(a, PANE_REMOTE, "big.bin");
+    key(a, 'G');
+    key(a, 'x');
+    CHECK(a->mode == M_MAIN && strstr(a->msg, "Nothing copied") != 0);
+    CHECK(stub_local(half, 0, 0, 0) != 0);
+    stub_local("STUB$DKA0:[USERS.TEST]BIG.BIN", 0, 0, &vers);
+    CHECK(vers == 2);
+
+    /* text: no half file, as before */
+    go(a, PANE_REMOTE, "long.txt");
+    stub_cancel_after(5);
+    key(a, 'G');
+    CHECK(strstr(a->msg, "was not kept") != 0);
+    CHECK(!stub_local("STUB$DKA0:[USERS.TEST]LONG.TXT_VFTP-PART", 0, 0, 0));
+    CHECK(!stub_local("STUB$DKA0:[USERS.TEST]LONG.TXT", 0, 0, 0));
+
+    /* a Put: the half file on the server is name.vftp-part, resumed from its size */
+    stub_add_local("STUB$DKA0:[USERS.TEST]", "UP.BIN", 0, big, (int) sizeof big);
+    a->act = PANE_LOCAL; key(a, 'J'); key(a, VK_RETURN);
+    go(a, PANE_LOCAL, "UP.BIN;1");
+    stub_cancel_after(2);
+    key(a, 'P');
+    CHECK(strstr(a->msg, "Put again") != 0);
+    d = stub_remote("/home/test/up.bin.vftp-part", &len);
+    CHECK(d && len > 0 && len < (int) sizeof big && !memcmp(d, big, (size_t) len));
+    CHECK(!stub_remote("/home/test/up.bin", 0));
+    a->act = PANE_REMOTE; key(a, 'J'); key(a, VK_RETURN);
+    go(a, PANE_LOCAL, "UP.BIN;1");
+    key(a, 'P');
+    CHECK(a->ask == ASK_RESUME);
+    key(a, 'Y');
+    d = stub_remote("/home/test/up.bin", &len);
+    CHECK(d && len == (int) sizeof big && !memcmp(d, big, sizeof big));
+    CHECK(!stub_remote("/home/test/up.bin.vftp-part", 0));
+    CHECK(strstr(stub_log(), "PUT STUB$DKA0:[USERS.TEST]UP.BIN;1 RESUMED at ") != 0);
+    vfr_disconnect(a->rem); a->rem = 0;
+}
+
+/* An FTP server without REST (the VMS ones, N8): no half file, as before */
+static void test_resume_ftp(void)
+{
+    vf_app *a = &app;
+    static char big[100000];
+    int i;
+    for (i = 0; i < (int) sizeof big; i++) big[i] = (char) ((i * 7) % 253);
+    start(24, 80, 0);
+    stub_ftp_rest(0);
+    stub_add_remote("/home/test/big.bin", big, (int) sizeof big);
+    key(a, VK_UP); erase(a); type(a, "ftp"); key(a, VK_DOWN);
+    erase(a); type(a, "test.example");
+    key(a, VK_DOWN); key(a, VK_DOWN); key(a, VK_DOWN);
+    type(a, "secret");
+    key(a, VK_DO); key(a, 'Y');                  /* D10: in clear */
+    CHECK(a->mode == M_MAIN && a->rem && !vfr_can_resume(a->rem));
+    go(a, PANE_REMOTE, "big.bin");
+    stub_cancel_after(40);
+    key(a, 'G');
+    CHECK(strstr(a->msg, "was not kept") != 0);
+    CHECK(!stub_local("STUB$DKA0:[USERS.TEST]BIG.BIN_VFTP-PART", 0, 0, 0));
+    stub_ftp_rest(1);
+}
+
 int main(void)
 {
     test_connect();
@@ -636,6 +756,8 @@ int main(void)
     test_sites();
     test_chmod();
     test_scp();
+    test_resume();
+    test_resume_ftp();
     test_screens();
     vf_app_free(&app);
     printf("test_app: %d checks, %d failed\n", checks, fails);

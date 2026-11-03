@@ -19,9 +19,10 @@ typedef struct {
     unsigned int (*rename)(vf_remote *r, const char *from, const char *to);
     unsigned int (*replace)(vf_remote *r, const char *from, const char *to);
     unsigned int (*chmod)(vf_remote *r, const char *path, unsigned int mode);
-    unsigned int (*open_read)(vf_remote *r, const char *path, int text, vfr_file **f);
+    unsigned int (*open_read)(vf_remote *r, const char *path, int text, unsigned long long offset, vfr_file **f);
     unsigned int (*read)(vfr_file *f, char *buf, int size, int *got);
-    unsigned int (*open_write)(vf_remote *r, const char *path, int text, unsigned long long size, vfr_file **f);
+    unsigned int (*open_write)(vf_remote *r, const char *path, int text, unsigned long long size,
+                               unsigned long long offset, vfr_file **f);
     unsigned int (*write)(vfr_file *f, const char *buf, int len);
     unsigned int (*close)(vfr_file *f);
     void (*keepalive)(vf_remote *r);
@@ -36,6 +37,7 @@ struct vf_remote {
     int secure;              /* a password sent now is encrypted */
     int vms_paths;           /* paths are VMS specs (a VMS FTP server, N8) */
     int need_size;           /* open_write must have the exact size (SCP) */
+    int resume;              /* a binary transfer can start at an offset (D16) */
 };
 struct vfr_file { vf_remote *r; };
 

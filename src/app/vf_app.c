@@ -532,30 +532,47 @@ static int put_size(vf_app *a, const char *lspec, int text, unsigned long long *
 /* Download one file step. 1 on success. */
 static int get_one(vf_app *a, const vf_step *s, char *err, int esz)
 {
-    const char *rpath = s->src, *lspec = s->dst;
-    char result[VF_SPEC_MAX];
+    const char *rpath = s->src, *lspec = s->dst, *wspec = s->part ? s->tmp : s->dst;
+    char result[VF_SPEC_MAX], m[200];
     static char buf[CHUNK];
     vfr_file *rf;
-    vfp_file *lf;
+    vfp_file *lf = 0;
     unsigned int st;
+    unsigned long long have = 0;
     int got, text;
     text = want_text(a, leaf(s->name));
     a->xfer_text = text;
     vf_strlcpy(a->xfer_name, s->name, sizeof a->xfer_name);
-    a->xfer_done = 0; a->xfer_total = s->size;
-    st = vfr_open_read(a->rem, rpath, text, &rf);
+    if (s->part && s->half && !s->resume) {        /* starting again: the old half goes */
+        st = vfp_delete(s->half);
+        logf_("DELETE %s (a half file, started again)%s", s->half, (st & 1) ? "" : " FAILED");
+    }
+    if (s->part && s->half && s->resume) {         /* on from its whole blocks (D16) */
+        st = vfp_open_resume(s->half, s->size, &have, &lf, result, sizeof result);
+        if (!(st & 1)) {
+            status_text(st, m, sizeof m);
+            snprintf(err, (size_t) esz, "%s: %s", s->half, m);
+            logf_("GET %s -> %s FAILED: %s", rpath, s->half, err);
+            return 0;
+        }
+        if (!have) { vfp_close(lf, 0); lf = 0; }   /* not a whole block: from the start */
+    }
+    a->xfer_done = have; a->xfer_total = s->size;
+    a->batch_done += have;
+    st = have ? vfr_open_read_at(a->rem, rpath, have, &rf) : vfr_open_read(a->rem, rpath, text, &rf);
     if (!(st & 1)) {
         snprintf(err, (size_t) esz, "%s: %s", s->name, vfr_error(a->rem));
         logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
+        if (lf) { vfp_close(lf, VFP_KEEP_PART); a->kept++; }
         return 0;
     }
-    st = vfp_open_write(lspec, text, s->size, &lf, result, sizeof result);
+    if (have) logf_("GET %s RESUMED at %llu bytes into %s", rpath, have, result);
+    else st = vfp_open_write(wspec, text, s->size, &lf, result, sizeof result);
     if (!(st & 1)) {
-        char m[200];
         vfr_close(rf);
         status_text(st, m, sizeof m);
-        snprintf(err, (size_t) esz, "%s: %s", lspec, m);
-        logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
+        snprintf(err, (size_t) esz, "%s: %s", wspec, m);
+        logf_("GET %s -> %s FAILED: %s", rpath, wspec, err);
         return 0;
     }
     vf_lines_init(&a->lines);
@@ -581,17 +598,30 @@ static int get_one(vf_app *a, const vf_step *s, char *err, int esz)
     }
     vfr_close(rf);
     if (!(st & 1)) {
-        vfp_close(lf, 0);
-        logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
+        if (s->part) {                             /* its whole blocks stay, to resume */
+            vfp_close(lf, VFP_KEEP_PART);
+            if (vfp_exists(result)) { a->kept++; logf_("KEPT %s to resume", result); }
+        } else vfp_close(lf, 0);
+        logf_("GET %s -> %s FAILED: %s", rpath, wspec, err);
         return 0;
     }
     st = vfp_close(lf, 1);
     if (!(st & 1)) {
-        char m[200];
         status_text(st, m, sizeof m);
         snprintf(err, (size_t) esz, "%s: %s", result, m);
         logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
         return 0;
+    }
+    if (s->part) {                                 /* the real name: a new version (N19) */
+        char done[VF_SPEC_MAX];
+        st = vfp_rename(result, lspec, done, sizeof done);
+        if (!(st & 1)) {
+            status_text(st, m, sizeof m);
+            snprintf(err, (size_t) esz, "%s: %s (the copy is %s)", lspec, m, result);
+            logf_("GET %s -> %s FAILED: %s", rpath, lspec, err);
+            return 0;
+        }
+        vf_strlcpy(result, done, sizeof result);
     }
     logf_("GET %s -> %s %s %llu bytes", rpath, result, text ? "ASCII" : "BINARY", a->xfer_done);
     if (a->lines.split) logf_("  %d records longer than %d were split", a->lines.split, VF_REC_MAX);
@@ -605,15 +635,19 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
 {
     const char *lspec = s->src, *rpath = s->dst;
     char wpath[VF_SPEC_MAX];
-    int replacing = s->exists;
+    int replacing = s->exists, part = s->part;
     static char buf[CHUNK + 1], out[CHUNK + 2];
     vfr_file *rf;
     vfp_file *lf;
     unsigned int st;
     int got, text = a->xmode == X_ASCII ? 1 : a->xmode == X_BINARY ? 0 : -1, olen = 0;
-    unsigned long long est;
-    if (replacing) snprintf(wpath, sizeof wpath, "%s" PART, rpath);
+    unsigned long long est, have = part && s->half && s->resume ? s->have : 0;
+    if (replacing || part) snprintf(wpath, sizeof wpath, "%s" PART, rpath);
     else vf_strlcpy(wpath, rpath, sizeof wpath);
+    if (part && s->half && !s->resume) {           /* starting again: the old half goes */
+        st = vfr_unlink(a->rem, wpath);
+        logf_("DELETE %s (a half file, started again)%s", wpath, (st & 1) ? "" : " FAILED");
+    }
     vf_strlcpy(a->xfer_name, s->name, sizeof a->xfer_name);
     st = vfp_open_read(lspec, &text, &est, &lf);
     if (!(st & 1)) {
@@ -624,7 +658,10 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
         return 0;
     }
     a->xfer_text = text;
-    a->xfer_done = 0; a->xfer_total = est;
+    if (text) { have = 0; part = 0; }              /* binary at planning, text now: as before */
+    if (have && !(vfp_skip(lf, have) & 1)) have = 0;
+    a->xfer_done = have; a->xfer_total = est;
+    a->batch_done += have;
     if (vfr_needs_size(a->rem)) {
         if (!put_size(a, lspec, text, &est, err, esz)) {
             vfp_close(lf, 1);
@@ -633,7 +670,18 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
         }
         a->xfer_total = est;
     }
-    st = vfr_open_write(a->rem, wpath, text, est, &rf);
+    if (have) {
+        st = vfr_open_write_at(a->rem, wpath, have, &rf);
+        if (st & 1) logf_("PUT %s RESUMED at %llu bytes into %s", lspec, have, wpath);
+    } else {
+        st = vfr_open_write(a->rem, wpath, text, est, &rf);
+        if (!(st & 1) && part && !replacing) {     /* no half file there (a name it will not
+                                                      take): straight to the name, as before */
+            part = 0;
+            vf_strlcpy(wpath, rpath, sizeof wpath);
+            st = vfr_open_write(a->rem, wpath, text, est, &rf);
+        }
+    }
     if (!(st & 1)) {
         vfp_close(lf, 1);
         snprintf(err, (size_t) esz, "%s: %s", wpath, vfr_error(a->rem));
@@ -677,8 +725,14 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
     }
     if (!(st & 1)) {
         logf_("PUT %s -> %s FAILED: %s", lspec, wpath, err);
-        /* no half file left: the temporary one always, a new one when cancelled */
-        if (replacing || strcmp(err, "cancelled") == 0) vfr_unlink(a->rem, wpath);
+        if (part) { a->kept++; logf_("KEPT %s to resume", wpath); }   /* D16 */
+        /* else no half file left: the temporary one always, a new one when cancelled */
+        else if (replacing || strcmp(err, "cancelled") == 0) vfr_unlink(a->rem, wpath);
+        return 0;
+    }
+    if (part && !replacing && !(vfr_rename(a->rem, wpath, rpath) & 1)) {   /* VMS: a new version (N19) */
+        snprintf(err, (size_t) esz, "%s: %s (the new copy is %s" PART ")", rpath, vfr_error(a->rem), leaf(s->name));
+        logf_("PUT %s -> %s FAILED: %s", lspec, rpath, err);
         return 0;
     }
     if (replacing && !(vfr_replace(a->rem, wpath, rpath) & 1)) {
@@ -695,7 +749,10 @@ static int put_one(vf_app *a, const vf_step *s, char *err, int esz)
 static void steps_free(vf_app *a)
 {
     int i;
-    for (i = 0; i < a->nsteps; i++) { free(a->steps[i].name); free(a->steps[i].src); free(a->steps[i].dst); }
+    for (i = 0; i < a->nsteps; i++) {
+        free(a->steps[i].name); free(a->steps[i].src); free(a->steps[i].dst);
+        free(a->steps[i].tmp); free(a->steps[i].half);
+    }
     free(a->steps);
     a->steps = 0; a->nsteps = a->capsteps = 0;
 }
@@ -806,6 +863,74 @@ static int older_version(const vf_pane *p, const vf_entry *e)
     return 0;
 }
 
+/* ---------- resume (D16) ---------- */
+
+#define LPART "_VFTP-PART"          /* a download's half file: on the type, valid on ODS-2 */
+
+/* The half file a Get of spec ("DEV:[DIR]NAME.TYPE") writes. 0 when it would not
+   be a valid name (ODS-2: a type of more than 39 characters). */
+static int lpart_spec(const vf_app *a, const char *spec, char *out, size_t size)
+{
+    const char *rb = strrchr(spec, ']'), *dot;
+    size_t tl;
+    dot = strrchr(rb ? rb : spec, '.');
+    tl = dot ? strlen(dot + 1) : strlen(rb ? rb + 1 : spec);
+    if (!a->ods5 && tl + strlen(LPART) > 39) return 0;
+    if (strlen(spec) + strlen(LPART) >= size) return 0;
+    snprintf(out, size, "%s" LPART, spec);
+    return 1;
+}
+
+/* The entry of p named leaf, of any version (the highest), case-blind on VMS. */
+static const vf_entry *find_any_version(const vf_pane *p, const char *leaf)
+{
+    const vf_entry *best = 0;
+    char b[300];
+    int i, v, bv = -2;
+    for (i = 0; i < p->n; i++) {
+        const vf_entry *e = &p->e[i];
+        if (e->is_dir || e->is_parent) continue;
+        v = vf_version(e->name, b, sizeof b);
+        if ((p->vms ? vf_strcasecmp(b, leaf) : strcmp(b, leaf)) != 0) continue;
+        if (v > bv) { best = e; bv = v; }
+    }
+    return best;
+}
+
+/* Step s (a file, size bytes) goes through a half file when it is binary and the
+   server can start part way; dlist (the destination, 0 if not there yet) may hold
+   one from an earlier try. 0 when there is no memory. */
+static int step_part(vf_app *a, vf_step *s, int get, int text, const vf_pane *dlist)
+{
+    char tmp[VF_SPEC_MAX];
+    const char *leaf;
+    const vf_entry *h;
+    if (text || !vfr_can_resume(a->rem)) return 1;
+    if (get) { if (!lpart_spec(a, s->dst, tmp, sizeof tmp)) return 1; }
+    else if (strlen(s->dst) + strlen(PART) >= sizeof tmp) return 1;
+    else snprintf(tmp, sizeof tmp, "%s" PART, s->dst);
+    if (!(s->tmp = dup_str(tmp))) return 0;
+    s->part = 1;
+    if (!dlist) return 1;
+    leaf = get ? strrchr(tmp, ']') : strrchr(tmp, '/');
+    leaf = leaf ? leaf + 1 : tmp;
+    if (!get && a->rvms) {                       /* a VMS server's spec: after the ] */
+        const char *rb = strrchr(tmp, ']');
+        if (rb) leaf = rb + 1;
+    }
+    if (!(h = find_any_version(dlist, leaf))) return 1;
+    if (get) {
+        char spec[VF_SPEC_MAX];
+        vf_lfile(dlist->dir, h->name, spec, sizeof spec);
+        if (!(s->half = dup_str(spec))) return 0;
+    } else if (!(s->half = dup_str(tmp))) return 0;
+    s->have = h->size;
+    s->htime = h->mtime; s->has_htime = h->has_time;
+    s->resume = s->have > 0 && s->have < s->size;   /* not smaller: not from this file as it is */
+    if (!s->resume) a->restarted++;
+    return 1;
+}
+
 /* Add the steps for entry e of directory sdir, copied into directory ddir. dlist:
    ddir's entries when ddir is there already, else 0.
    A directory brings what is in it, to VF_MAXDEPTH levels; a link to a directory
@@ -834,6 +959,10 @@ static int scan(vf_app *a, int get, const char *sdir, const char *ddir, const vf
         snprintf(name, sizeof name, "%s%s%s", prefix, prefix[0] ? "/" : "", nm);
         if ((idx = step_add(a, 0, parent, top, name, src, dst, e->size, exists)) < 0)
             return step_fail(a, idx, prefix[0] ? prefix : nm);
+        if (!step_part(a, &a->steps[idx], get,
+                       get ? want_text(a, e->name)
+                           : a->xmode == X_ASCII ? 1 : a->xmode == X_BINARY ? 0 : e->is_text, dlist))
+            return step_fail(a, -1, nm);
         return 1;
     }
     if (e->is_link) { a->scan_links++; return 1; }      /* not followed: it may lead back up */
@@ -951,10 +1080,14 @@ static void run_transfer(vf_app *a)
     }
     reread(a, a->ops_get ? PANE_LOCAL : PANE_REMOTE);
     if (a->ops_get) vf_pane_rebuild(&a->pane[PANE_REMOTE]); else vf_pane_rebuild(&a->pane[PANE_LOCAL]);
-    if (a->cancel)
+    if (a->cancel && a->kept)
+        vf_set_msg(a, 1, "Cancelled after %d file%s; the one being moved is kept as a half file: %s again resumes it",
+                   ok, ok == 1 ? "" : "s", a->ops_get ? "Get" : "Put");
+    else if (a->cancel)
         vf_set_msg(a, 1, "Cancelled after %d file%s; the file being moved was not kept", ok, ok == 1 ? "" : "s");
     else if (failed || first[0])
-        vf_set_msg(a, 1, "%d copied, %d failed: %s", ok, failed, first);
+        vf_set_msg(a, 1, "%d copied, %d failed: %s%s", ok, failed, first,
+                   a->kept ? " (kept as a half file, to resume)" : "");
     else {
         char b[16], r[16], d[48];
         vf_fmt_bytes(a->batch_done, b, sizeof b);
@@ -965,12 +1098,19 @@ static void run_transfer(vf_app *a)
                    ok, ok == 1 ? "" : "s", d, b, secs, r);
     }
     note_left_out(a);
+    if (a->restarted) {
+        vf_strlcpy(m, a->msg, sizeof m);
+        vf_set_msg(a, a->msg_err, "%s; %d half file%s not smaller than the file, started again", m,
+                   a->restarted, a->restarted == 1 ? "" : "s");
+    }
     steps_free(a);
 }
 
+static void transfer_ask(vf_app *a, int stage);
+
 static void transfer(vf_app *a, int get)
 {
-    int i, replace = 0, files = 0, dirs = 0;
+    int i;
     vf_pane *src;
     if (!a->rem) { vf_set_msg(a, 1, "Not connected: O opens a connection"); return; }
     collect(a, get ? PANE_REMOTE : PANE_LOCAL, 1, &i);
@@ -979,6 +1119,7 @@ static void transfer(vf_app *a, int get)
     src = &a->pane[a->ops_pane];
     steps_free(a);
     a->scan_links = a->scan_deep = 0;
+    a->kept = a->restarted = 0;
     a->cancel = 0; a->scan_drawn = 0;
     for (i = 0; i < a->nops; i++)
         if (!scan(a, get, src->dir, a->pane[get ? PANE_LOCAL : PANE_REMOTE].dir, &src->e[a->ops[i]],
@@ -987,11 +1128,45 @@ static void transfer(vf_app *a, int get)
             steps_free(a);
             return;
         }
-    for (i = 0; i < a->nsteps; i++) if (a->steps[i].is_dir) dirs++; else files++;
     if (!a->nsteps) {
         vf_set_msg(a, 1, "Nothing copied");
         note_left_out(a);
         return;
+    }
+    transfer_ask(a, 0);
+}
+
+/* The questions before a transfer, in turn (stage 0: resume, D16; 1: replace),
+   then the transfer itself. */
+static void transfer_ask(vf_app *a, int stage)
+{
+    int i, replace = 0, files = 0, dirs = 0, get = a->ops_get, halves = 0;
+    for (i = 0; i < a->nsteps; i++) if (a->steps[i].is_dir) dirs++; else files++;
+    if (stage == 0) {
+        char w[40];
+        text_free(a);
+        for (i = 0; i < a->nsteps; i++) {
+            const vf_step *s = &a->steps[i];
+            if (s->is_dir || !s->resume) continue;
+            if (!halves++) {
+                text_add(a, "A transfer that did not finish left a half file of:");
+                text_add(a, "");
+            }
+            if (s->has_htime) vf_fmt_when(&s->htime, w, sizeof w); else w[0] = '\0';
+            text_add(a, "  %s", s->name);
+            text_add(a, "      %llu of %llu bytes%s%s", s->have, s->size, w[0] ? ", the half file of " : "", w);
+        }
+        if (halves) {
+            text_add(a, "");
+            text_add(a, "Y or Return goes on from where each one stopped; N starts them again and");
+            text_add(a, "deletes the half files; any other key copies nothing. The half files are");
+            text_add(a, "taken as they are: if a file changed since, say N.");
+            snprintf(a->text_title, sizeof a->text_title, "%s: resume", get ? "Get" : "Put");
+            a->mode = M_CONFIRM; a->prompt = P_ASK; a->ask = ASK_RESUME;
+            vf_strlcpy(a->prompt_label, "Resume them? (Y/N) [Y]: ", sizeof a->prompt_label);
+            vfp_flush_keys();
+            return;
+        }
     }
     if (!get) {
         /* would an upload replace a remote file? ask first */
@@ -1094,7 +1269,7 @@ static void rename_done(vf_app *a, const char *to)
         vf_lfile(p->dir, e->name, from, sizeof from);
         if (strchr(to, ':') || strchr(to, '[')) vf_strlcpy(dest, to, sizeof dest);
         else vf_lfile(p->dir, to, dest, sizeof dest);
-        st = vfp_rename(from, dest);
+        st = vfp_rename(from, dest, 0, 0);
         if (!(st & 1)) status_text(st, m, sizeof m);
     } else {
         vf_xfile(a->rvms, p->dir, e->name, from, sizeof from);
@@ -1663,6 +1838,18 @@ static void ask_answer(vf_app *a, int key)
         a->mode = M_SITES;
         if (yes) site_delete(a); else vf_set_msg(a, 0, "Not deleted");
         return;
+    case ASK_RESUME: {
+        int i;
+        if (!yes && key != VK_RETURN && key != 'n' && key != 'N') {
+            steps_free(a);
+            vf_set_msg(a, 0, "Nothing copied; the half files are as they were");
+            return;
+        }
+        if (!yes && key != VK_RETURN)
+            for (i = 0; i < a->nsteps; i++) a->steps[i].resume = 0;   /* again, the halves deleted */
+        transfer_ask(a, 1);
+        return;
+    }
     case ASK_REPLACE:
         if (yes) run_transfer(a);
         else { steps_free(a); vf_set_msg(a, 0, "Nothing was put"); }

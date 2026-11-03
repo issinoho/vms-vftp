@@ -32,6 +32,9 @@ int vf_ftp_epsv(const char *text, int *port);
 /* "257 \"USER$ROOT:[iain]\" is current directory.": the quoted path ("" doubled
    inside it is one "). 1 if read. */
 int vf_ftp_pwd(const char *text, char *out, size_t size);
+/* FEAT's reply text: does a line name feature feat ("REST STREAM"), case-blind,
+   as the line's first words? */
+int vf_ftp_feat(const char *text, const char *feat);
 /* "150 Opening ... (74 bytes)": the size the server announces. 1 if there is one. */
 int vf_ftp_size150(const char *text, unsigned long long *bytes);
 

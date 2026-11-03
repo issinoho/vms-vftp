@@ -101,6 +101,25 @@ int vf_ftp_epsv(const char *text, int *port)
     return 1;
 }
 
+int vf_ftp_feat(const char *text, const char *feat)
+{
+    size_t n = strlen(feat);
+    const char *l = text;
+    while (*l) {
+        const char *e = strchr(l, '\n');
+        size_t len = e ? (size_t) (e - l) : strlen(l);
+        while (len && (*l == ' ' || *l == '\t')) { l++; len--; }
+        if (len >= n) {
+            size_t i;
+            for (i = 0; i < n && toupper((unsigned char) l[i]) == toupper((unsigned char) feat[i]); i++) ;
+            if (i == n && (len == n || l[n] == ' ' || l[n] == ';' || l[n] == '.')) return 1;
+        }
+        if (!e) break;
+        l = e + 1;
+    }
+    return 0;
+}
+
 int vf_ftp_pwd(const char *text, char *out, size_t size)
 {
     const char *p = strchr(text, '"');

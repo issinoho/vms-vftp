@@ -17,7 +17,7 @@
 typedef struct { char path[256]; int is_dir, is_link; char *data; int len; unsigned int perms; int used; } rnode;
 
 static rnode srv[MAXR];
-static int trusted, changed, ftps, ftps_trusted;
+static int trusted, changed, ftps, ftps_trusted, ftp_rest = 1;
 
 struct vf_remote { char err[256]; int logged_in; int ftp, tls, scp; };
 struct vfr_file { vf_remote *r; rnode *n; int pos, writing; char *buf; int len; char path[256];
@@ -52,6 +52,7 @@ void stub_add_remote_dir(const char *path) { radd(path, 1, 0, 0); }
 void stub_add_remote_link(const char *path) { rnode *n = radd(path, 1, 0, 0); if (n) n->is_link = 1; }
 void stub_trust(int on) { trusted = on; }
 void stub_ftps(int on) { ftps = on; ftps_trusted = 0; }
+void stub_ftp_rest(int on) { ftp_rest = on; }
 void stub_change_key(int on) { changed = on; }
 
 const char *stub_remote(const char *path, int *len)
@@ -83,7 +84,7 @@ static void remote_reset(void)
     radd("/home/test/README.md", 0, "# Read me\n", 10);
     radd("/home/test/kit.zip", 0, zip, (int) sizeof zip);
     radd("/home/test/data/big.log", 0, "x\n", 2);
-    trusted = 0; changed = 0;
+    trusted = 0; changed = 0; ftp_rest = 1;
 }
 
 void stub_remote_reset(void) { remote_reset(); }   /* called by stub_reset */
@@ -131,6 +132,7 @@ unsigned int vfr_trust(vf_remote *r)
 int vfr_secure(vf_remote *r) { return r && (!r->ftp || r->tls); }
 int vfr_vms_paths(vf_remote *r) { (void) r; return 0; }
 int vfr_needs_size(vf_remote *r) { return r && r->scp; }
+int vfr_can_resume(vf_remote *r) { return r && !r->scp && (!r->ftp || ftp_rest); }
 
 unsigned int vfr_methods(vf_remote *r, const char *user, char *out, int size)
 {
@@ -285,6 +287,15 @@ unsigned int vfr_open_read(vf_remote *r, const char *path, int text, vfr_file **
     return 1;
 }
 
+unsigned int vfr_open_read_at(vf_remote *r, const char *path, unsigned long long offset, vfr_file **f)
+{
+    unsigned int st;
+    if (offset && !vfr_can_resume(r)) { vf_strlcpy(r->err, "this server cannot start part way", sizeof r->err); return VFR_FAIL; }
+    st = vfr_open_read(r, path, 0, f);
+    if (st & 1) (*f)->pos = offset > (unsigned long long) (*f)->n->len ? (*f)->n->len : (int) offset;
+    return st;
+}
+
 unsigned int vfr_read(vfr_file *f, char *buf, int size, int *got)
 {
     int n = f->n->len - f->pos;
@@ -307,6 +318,25 @@ unsigned int vfr_open_write(vf_remote *r, const char *path, int text, unsigned l
     (*f)->r = r; (*f)->writing = 1; (*f)->size = size;
     vf_strlcpy((*f)->path, path, sizeof (*f)->path);
     radd(path, 0, 0, 0);                   /* created (empty) at open, as SFTP does */
+    return 1;
+}
+
+/* as SFTP without TRUNC: what is there up to offset stays */
+unsigned int vfr_open_write_at(vf_remote *r, const char *path, unsigned long long offset, vfr_file **f)
+{
+    rnode *n = rfind(path);
+    int keep;
+    if (offset && !vfr_can_resume(r)) { vf_strlcpy(r->err, "this server cannot start part way", sizeof r->err); return VFR_FAIL; }
+    if (offset && (!n || n->is_dir || (unsigned long long) n->len < offset)) {
+        vf_strlcpy(r->err, "No such file", sizeof r->err);
+        return VFR_FAIL;
+    }
+    keep = (int) offset;
+    *f = (vfr_file *) calloc(1, sizeof **f);
+    (*f)->r = r; (*f)->writing = 1;
+    vf_strlcpy((*f)->path, path, sizeof (*f)->path);
+    if (keep) { (*f)->buf = (char *) malloc((size_t) keep); memcpy((*f)->buf, n->data, (size_t) keep); (*f)->len = keep; }
+    else radd(path, 0, 0, 0);
     return 1;
 }
 

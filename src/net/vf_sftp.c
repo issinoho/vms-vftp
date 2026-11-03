@@ -161,6 +161,7 @@ unsigned int vfr_sftp_connect(const char *host, int port, vf_remote **out, vfr_h
     if (!r) { snprintf(err, (size_t) errsz, "no memory"); return VFR_FAIL; }
     r->base.ops = &ops;
     r->base.secure = 1;                                 /* SSH: the password is encrypted */
+    r->base.resume = 1;                                 /* reads and writes at an offset (N19) */
     vf_strlcpy(r->host, host, sizeof r->host);
     r->port = port;
     r->fd = vfr_dial(host, port, err, errsz);
@@ -430,13 +431,15 @@ static unsigned int sftp_chmod(vf_remote *rr, const char *path, unsigned int mod
     return libssh2_sftp_setstat(r->sftp, path, &at) == 0 ? 1 : fail(r, path);
 }
 
-static unsigned int sftp_open_read(vf_remote *rr, const char *path, int text, vfr_file **out)
+static unsigned int sftp_open_read(vf_remote *rr, const char *path, int text, unsigned long long offset,
+                                   vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
     sftp_file *f;
     LIBSSH2_SFTP_HANDLE *h = libssh2_sftp_open(r->sftp, path, LIBSSH2_FXF_READ, 0);
     (void) text;                                        /* SFTP moves bytes (N4) */
     if (!h) return fail(r, path);
+    if (offset) libssh2_sftp_seek64(h, (libssh2_uint64_t) offset);   /* a resumed Get (D16) */
     f = (sftp_file *) calloc(1, sizeof *f);
     if (!f) { libssh2_sftp_close(h); snprintf(r->base.err, sizeof r->base.err, "no memory"); return VFR_FAIL; }
     f->base.r = rr; f->r = r; f->h = h;
@@ -453,16 +456,20 @@ static unsigned int sftp_read(vfr_file *ff, char *buf, int size, int *got)
     return 1;
 }
 
-static unsigned int sftp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size, vfr_file **out)
+static unsigned int sftp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size,
+                                    unsigned long long offset, vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
     sftp_file *f;
+    /* a resumed Put (D16) keeps what is there and writes on from offset */
     LIBSSH2_SFTP_HANDLE *h = libssh2_sftp_open(r->sftp, path,
-                                               LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC,
+                                               LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT |
+                                               (offset ? 0 : LIBSSH2_FXF_TRUNC),
                                                LIBSSH2_SFTP_S_IRUSR | LIBSSH2_SFTP_S_IWUSR |
                                                LIBSSH2_SFTP_S_IRGRP | LIBSSH2_SFTP_S_IROTH);
     (void) text; (void) size;
     if (!h) return fail(r, path);
+    if (offset) libssh2_sftp_seek64(h, (libssh2_uint64_t) offset);
     f = (sftp_file *) calloc(1, sizeof *f);
     if (!f) { libssh2_sftp_close(h); snprintf(r->base.err, sizeof r->base.err, "no memory"); return VFR_FAIL; }
     f->base.r = rr; f->r = r; f->h = h;
@@ -760,13 +767,14 @@ typedef struct {
 
 /* libssh2_struct_stat is struct stat: build_vms.com compiles this file with
    libssh2's _USE_STD_STAT and _LARGEFILE, or scp_recv2 writes past sb. */
-static unsigned int scp_open_read(vf_remote *rr, const char *path, int text, vfr_file **out)
+static unsigned int scp_open_read(vf_remote *rr, const char *path, int text, unsigned long long offset,
+                                  vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
     libssh2_struct_stat sb;
     scp_file *f;
     LIBSSH2_CHANNEL *ch;
-    (void) text;                                        /* bytes, as SFTP */
+    (void) text; (void) offset;                         /* bytes, as SFTP; never part way */
     memset(&sb, 0, sizeof sb);
     ch = libssh2_scp_recv2(r->s, path, &sb);
     if (!ch) return fail(r, path);
@@ -794,12 +802,13 @@ static unsigned int scp_read(vfr_file *ff, char *buf, int size, int *got)
     return 1;
 }
 
-static unsigned int scp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size, vfr_file **out)
+static unsigned int scp_open_write(vf_remote *rr, const char *path, int text, unsigned long long size,
+                                   unsigned long long offset, vfr_file **out)
 {
     sftp_remote *r = (sftp_remote *) rr;
     scp_file *f;
     LIBSSH2_CHANNEL *ch;
-    (void) text;
+    (void) text; (void) offset;                         /* never part way: no resume */
     ch = libssh2_scp_send64(r->s, path, 0644, (libssh2_int64_t) size, 0, 0);
     if (!ch) return fail(r, path);
     f = (scp_file *) calloc(1, sizeof *f);
@@ -868,6 +877,7 @@ unsigned int vfr_scp_connect(const char *host, int port, vf_remote **out, vfr_ho
         r->scp = 1;
         r->base.ops = &scp_ops;
         r->base.need_size = 1;
+        r->base.resume = 0;                             /* scp has no offset */
     }
     return st;
 }

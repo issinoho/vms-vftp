@@ -53,7 +53,9 @@ static void draw_bottom(vf_app *a, const char *l1label, const char *l1, const ch
         n = vf_put(s, r1, 1, a->prompt_label, VF_A_BOLD, -1);
         if (a->prompt == P_ASK) {
             s->cursor_on = 1; s->cursor_row = r1; s->cursor_col = 1 + n;
-            menu_line(s, r2, "CHOOSE", "&Y do it   any other key: do nothing   Up/Down scroll", VF_A_REV);
+            menu_line(s, r2, "CHOOSE", a->ask == ASK_RESUME
+                      ? "&Y or Return resume  &N start again  other keys: nothing  Up/Down scroll"
+                      : "&Y do it   any other key: do nothing   Up/Down scroll", VF_A_REV);
             return;
         }
         {

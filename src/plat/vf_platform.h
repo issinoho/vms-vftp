@@ -49,7 +49,8 @@ unsigned int vfp_mkdir(const char *dir);                    /* "DKA0:[IAIN.NEW]"
 /* Delete exactly one file version ("DKA0:[IAIN]X.TXT;3"); a directory file only
    if it is empty. */
 unsigned int vfp_delete(const char *spec);
-unsigned int vfp_rename(const char *from, const char *to);
+/* result (may be 0): the new name in full, with its version (a new one, N19) */
+unsigned int vfp_rename(const char *from, const char *to, char *result, int rsize);
 
 /* Reading a file for an upload or a view. *is_text on entry: -1 decide (D6:
    variable or VFC records with carriage control are text), 0 binary, 1 text; on
@@ -61,6 +62,8 @@ unsigned int vfp_open_read(const char *spec, int *is_text, unsigned long long *b
    size). Binary: up to size bytes. At the end: VFP_EOF. */
 #define VFP_EOF 0x1002u            /* even: a failure status, so "st & 1" loops stop */
 unsigned int vfp_read(vfp_file *f, char *buf, int size, int *got);
+/* Binary, before the first read: start at byte offset (a resumed Put, D16). */
+unsigned int vfp_skip(vfp_file *f, unsigned long long offset);
 
 /* Writing a download: always a new version of spec (which has no version).
    Text: variable-length records with carriage control, one vfp_write per record.
@@ -70,8 +73,14 @@ unsigned int vfp_read(vfp_file *f, char *buf, int size, int *got);
 unsigned int vfp_open_write(const char *spec, int text, unsigned long long expected,
                             vfp_file **f, char *result, int rsize);
 unsigned int vfp_write(vfp_file *f, const char *buf, int len);
+/* A binary half file left by vfp_close(f, VFP_KEEP_PART) (D16): opened to write on
+   after its whole blocks, *have set to their bytes; expected as vfp_open_write's. */
+unsigned int vfp_open_resume(const char *spec, unsigned long long expected, unsigned long long *have,
+                             vfp_file **f, char *result, int rsize);
 /* Close; for a file being written, keep = 0 deletes it (a cancelled or failed
-   download leaves nothing behind). */
+   download leaves nothing behind); VFP_KEEP_PART keeps a binary one's whole blocks
+   (the end of file after the last; none: deleted), to resume from. */
+#define VFP_KEEP_PART 2
 unsigned int vfp_close(vfp_file *f, int keep);
 
 /* ---------- SSH's files ---------- */

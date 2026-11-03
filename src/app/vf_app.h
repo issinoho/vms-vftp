@@ -15,7 +15,7 @@
 
 enum { M_MAIN, M_HELP, M_VIEW, M_INFO, M_FORM, M_CONFIRM, M_SITES };
 enum { P_NONE, P_FILTER, P_RENAME, P_MKDIR, P_TAG, P_JUMP, P_ASK, P_SITE, P_CHMOD };
-enum { ASK_DELETE = 1, ASK_REPLACE, ASK_HOSTKEY, ASK_CLEARPW, ASK_SITE_REPLACE, ASK_SITE_DELETE };
+enum { ASK_DELETE = 1, ASK_REPLACE, ASK_HOSTKEY, ASK_CLEARPW, ASK_SITE_REPLACE, ASK_SITE_DELETE, ASK_RESUME };
 enum { X_AUTO, X_ASCII, X_BINARY };
 enum { PANE_LOCAL, PANE_REMOTE };
 
@@ -39,6 +39,15 @@ typedef struct {
     unsigned long long size;
     char *name;              /* the path below the pane, remote names: "data/big.log" */
     char *src, *dst;         /* full paths; a directory's dst is what mkdir takes */
+    /* resume (D16): a binary file by a protocol that can start part way goes
+       through a half file, tmp, given dst's name at the end */
+    int part;
+    char *tmp;               /* the half file to write (local: no version) */
+    char *half;              /* one from an earlier try (local: with its version), or 0 */
+    unsigned long long have; /* its bytes */
+    vf_when htime;           /* and when it was written, if has_htime */
+    int has_htime;
+    int resume;              /* 1: go on from have; 0: start again (the half one deleted) */
 } vf_step;
 
 typedef struct {
@@ -95,6 +104,7 @@ typedef struct {
     int ops[VF_MAXOPS], nops, ops_pane, ops_get;
     vf_step *steps; int nsteps, capsteps;
     int scan_links, scan_deep;   /* directories the scan left out: links, too deep */
+    int kept, restarted;         /* half files kept to resume; ones not smaller, started again (D16) */
     double scan_drawn;
 
     /* a transfer in progress (the strip shows it) */

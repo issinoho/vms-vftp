@@ -258,7 +258,7 @@ unsigned int vfp_delete(const char *spec)
     return 1;
 }
 
-unsigned int vfp_rename(const char *from, const char *to)
+unsigned int vfp_rename(const char *from, const char *to, char *result, int rsize)
 {
     lfile *f = find(from);
     char dir[128], name[96];
@@ -270,6 +270,7 @@ unsigned int vfp_rename(const char *from, const char *to)
     f->ver = 0;
     f->ver = ver ? ver : highest(dir, name) + 1;
     vf_strlcpy(f->name, name, sizeof f->name);
+    if (result) snprintf(result, (size_t) rsize, "%s%s;%d", f->dir, f->name, f->ver);
     return 1;
 }
 
@@ -311,6 +312,29 @@ unsigned int vfp_read(vfp_file *h, char *buf, int size, int *got)
     return 1;
 }
 
+unsigned int vfp_skip(vfp_file *h, unsigned long long offset)
+{
+    if (h->text || h->writing) return 0x14;
+    h->pos = offset > (unsigned long long) h->f->len ? h->f->len : (int) offset;
+    return 1;
+}
+
+unsigned int vfp_open_resume(const char *spec, unsigned long long expected, unsigned long long *have,
+                             vfp_file **out, char *result, int rsize)
+{
+    lfile *f = find(spec);
+    vfp_file *h;
+    (void) expected;
+    if (!f || f->is_dir) return ST_FNF;
+    f->len = f->len / 512 * 512;            /* its whole blocks, as on VMS */
+    *have = (unsigned long long) f->len;
+    h = (vfp_file *) calloc(1, sizeof *h);
+    h->f = f; h->writing = 1;
+    snprintf(result, (size_t) rsize, "%s%s;%d", f->dir, f->name, f->ver);
+    *out = h;
+    return 1;
+}
+
 unsigned int vfp_open_write(const char *spec, int text, unsigned long long expected, vfp_file **out,
                             char *result, int rsize)
 {
@@ -341,6 +365,10 @@ unsigned int vfp_write(vfp_file *h, const char *buf, int len)
 
 unsigned int vfp_close(vfp_file *h, int keep)
 {
+    if (keep == VFP_KEEP_PART) {
+        if (h->writing && !h->text) h->f->len = h->f->len / 512 * 512;   /* whole blocks */
+        keep = h->writing && !h->text && h->f->len > 0;
+    }
     if (h->writing && !keep) { free(h->f->data); h->f->data = 0; h->f->used = 0; }
     free(h);
     return 1;

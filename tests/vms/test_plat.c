@@ -121,8 +121,10 @@ int main(void)
         char from[600], to[600], sub[600];
         snprintf(from, sizeof from, "%sB.BIN;1", dir);
         snprintf(to, sizeof to, "%sRENAMED.BIN", dir);
-        CHECK(vfp_rename(from, to) & 1);
+        char done[600];
+        CHECK(vfp_rename(from, to, done, sizeof done) & 1);
         CHECK(vfp_exists(to));
+        CHECK(strstr(done, "RENAMED.BIN;1") != 0);
         snprintf(sub, sizeof sub, "%.*s.SUB]", (int) strlen(dir) - 1, dir);
         CHECK(vfp_mkdir(sub) & 1);
     }
@@ -138,6 +140,44 @@ int main(void)
         if (!(st & 1)) printf("delete %s: %X\n", sub, st);
         CHECK(st & 1);
         CHECK(!vfp_exists(sub));
+    }
+    {
+        /* resume (D16): a half file keeps its whole blocks, opened again it goes on
+           after them, and a read can start part way */
+        static char big[1500], back[1600];
+        char res[512], res2[512], spec[600], done[600];
+        unsigned long long have = 0, est;
+        vfp_file *f;
+        int i, t, n, got;
+        for (i = 0; i < (int) sizeof big; i++) big[i] = (char) (i % 241);
+        CHECK(write_file("H.BIN_VFTP-PART", 0, big, 1300, 1500, VFP_KEEP_PART, res));
+        CHECK(vfp_exists(res));
+        st = vfp_open_resume(res, 1500, &have, &f, res2, sizeof res2);
+        CHECK((st & 1) && have == 1024);
+        if (st & 1) {
+            CHECK(vfp_write(f, big + 1024, 476) & 1);
+            CHECK(vfp_close(f, 1) & 1);
+        }
+        snprintf(spec, sizeof spec, "%sH.BIN", dir);
+        CHECK(vfp_rename(res, spec, done, sizeof done) & 1);
+        CHECK(strstr(done, "H.BIN;1") != 0);
+        n = read_file(done, 0, back, sizeof back, &t);
+        CHECK(n == 1500 && !t && !memcmp(back, big, 1500));
+        /* under a block written: nothing kept */
+        CHECK(write_file("S.BIN_VFTP-PART", 0, big, 300, 1500, VFP_KEEP_PART, res));
+        CHECK(!vfp_exists(res));
+        /* a read from byte 1000 */
+        t = 0;
+        st = vfp_open_read(done, &t, &est, &f);
+        CHECK(st & 1);
+        if (st & 1) {
+            CHECK(vfp_skip(f, 1000) & 1);
+            n = 0;
+            while (n < (int) sizeof back && (vfp_read(f, back + n, (int) sizeof back - n, &got) & 1)) n += got;
+            vfp_close(f, 1);
+            CHECK(n == 500 && !memcmp(back, big + 1000, 500));
+        }
+        CHECK(vfp_delete(done) & 1);
     }
     vfp_ssh_file("known_hosts", kh, sizeof kh);
     printf("known_hosts %s exists %d\n", kh, vfp_exists(kh));
