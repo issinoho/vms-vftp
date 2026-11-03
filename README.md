@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/banner.svg" alt="VFTP on OpenVMS: the local directory and an SFTP server's side by side in XTree Gold's blue, cyan and yellow, two files tagged, with the status line and the two-line command menu" width="100%">
+</p>
+
 # vms-vftp
 
 [![Release](https://img.shields.io/github/v/release/issinoho/vms-vftp?label=release)](https://github.com/issinoho/vms-vftp/releases/latest)
