@@ -184,10 +184,11 @@ scp is); the size by a temporary copy in SYS$SCRATCH (twice the disk, and no
 progress while it is sent); listing by SFTP when the server has it (then it is
 SFTP).
 
-## D16. Resume: binary transfers through a half file under a temporary name (2026-11-03, proposed)
+## D16. Resume: binary transfers through a half file under a temporary name (2026-11-03, accepted)
 
 The shape was chosen by the user (a temporary name, binary only, ask with Resume as
-the default); the details are proposed. A binary transfer by a protocol that can
+the default); the details were confirmed by the user as written on 2026-11-03,
+after the live runs of N20. A binary transfer by a protocol that can
 start at an offset (SFTP; FTP when the server's FEAT has `REST STREAM`) writes to a
 half file and gives it the real name only when the transfer has finished:
 - A Get writes `NAME.EXT_VFTP-PART` (`_VFTP-PART` added to the type, so it is valid
