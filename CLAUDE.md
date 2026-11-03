@@ -41,4 +41,5 @@ as in VLMF.
 ## Commits
 
 Commit in logical steps with messages that explain why. Record what was verified and how.
-Don't push unless the user asks; there is no GitHub repository yet.
+Don't push unless the user asks. The repository is github.com/issinoho/vms-vftp
+(public): check every commit for node details before a push.
