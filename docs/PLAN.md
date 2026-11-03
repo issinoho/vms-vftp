@@ -157,8 +157,9 @@ built, installed on both nodes and left installed; the installed image starts,
 shows help and reports its version (N21). vms-libssh2 is on GitHub and released
 (v1.11.1-vms1, the two kits and SHA256SUMS, the downloads checked against them).
 Before VFTP's first push its history was rewritten to take out two LAN addresses
-(test strings and NOTES, now 192.0.2.x). Left: VFTP's repository and v0.1.0 release,
-SYSTARTUP and SYLOGIN on the nodes (vms-site-config).
+(test strings and NOTES, now 192.0.2.x). VFTP is on GitHub and released (v0.1.0,
+the two kits and SHA256SUMS, the downloads checked against them and compared with
+the tested kits). Left: SYSTARTUP and SYLOGIN on the nodes (vms-site-config).
 
 ## Later ideas
 
