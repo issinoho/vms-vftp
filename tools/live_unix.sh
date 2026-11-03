@@ -40,7 +40,8 @@ grep -E '^LIVE' "$out" || true
 
 echo "==== the server's scratch directory"
 ls -la "$RDIR"
-ok() { if eval "$2"; then echo "UNIX: $1"; else echo "UNIX: FAILED: $1"; fi; }
+fails=0
+ok() { if eval "$2"; then echo "UNIX: $1"; else echo "UNIX: FAILED: $1"; fails=$((fails + 1)); fi; }
 after=", and after the Put of its download"; [ -n "$scp" ] && after=
 ok "big.bin as it was after the cancelled replacing Put$after" \
    '[ "$(md5sum < "$RDIR/big.bin" | cut -d" " -f1)" = "$big" ]'
@@ -83,3 +84,4 @@ sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"
 args=()
 for s in "$@"; do args+=(--step "$s"); done
 python3 "$top/tools/vtscreen.py" "${args[@]}" "${out%.txt}.pty"
+[ "$fails" = 0 ] || { echo "$(basename "$0") $node: $fails check(s) FAILED" >&2; exit 1; }

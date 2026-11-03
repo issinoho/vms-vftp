@@ -82,7 +82,8 @@ echo "==== the server's /remote"
 ls -la "$r"
 echo "==== the server's writes (its log)"
 grep -E '<- (STOR|RNFR|RNTO|DELE|MKD|RMD|APPE) ' "$d/ftpd.log" | sed 's/^.*<- //'
-ok() { if eval "$2"; then echo "UNIXFTP: $1"; else echo "UNIXFTP: FAILED: $1"; fi; }
+fails=0
+ok() { if eval "$2"; then echo "UNIXFTP: $1"; else echo "UNIXFTP: FAILED: $1"; fails=$((fails + 1)); fi; }
 if [ -n "$tls" ]; then
     ok "FTPS: the certificate asked about, N then Y, and pinned as openssl shows it" \
        'grep -aq "host key not trusted" "$out" && grep -aqF "TLS certificate $fp" "$out"'
@@ -117,3 +118,4 @@ sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"
 args=()
 for s in "$@"; do args+=(--step "$s"); done
 python3 "$top/tools/vtscreen.py" "${args[@]}" "${out%.txt}.pty"
+[ "$fails" = 0 ] || { echo "$(basename "$0") $node: $fails check(s) FAILED" >&2; exit 1; }

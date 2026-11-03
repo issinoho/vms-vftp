@@ -7,6 +7,7 @@
 # PTYDRIVE knows \r \e \\ \xHH only: Tab is \x09. Pick files by filter and GOLD
 # Down (the last entry), not by counting rows: [.LIVE] holds directories too.
 # A wait is at most 30 seconds: PTYDRIVE takes a longer one as 1.5.
+# A line with no keys only waits: one follows each 10 MB resume, which can take longer.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 3 form closed | \e[21~
@@ -52,11 +53,13 @@
 2 resume local big last | \eOP\e[B
 4 resume put big | p
 30 resume put go on | y
+20 resume put wait | 
 2 resume to remote | \x09
 2 resume remote top | \eOP\e[A
 2 resume remote big1 | \e[B
 4 resume get big | g
 30 resume get go on | \r
+20 resume get wait | 
 2 resume to local | \x09
 2 local filter | f\x05\x15*.TXT\r
 2 local last | \eOP\e[B

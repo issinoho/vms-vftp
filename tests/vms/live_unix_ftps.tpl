@@ -6,6 +6,7 @@
 # end a second login, which must not ask again. The rest as live_unix_ftp.tpl.
 # PTYDRIVE knows \r \e \\ \xHH.
 # A wait is at most 30 seconds: PTYDRIVE takes a longer one as 1.5.
+# A line with no keys only waits: one follows each 10 MB resume, which can take longer.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 2 to protocol | \e[A
@@ -48,12 +49,14 @@
 2 resume remote big | \e[B
 4 resume get big | g
 30 resume get go on | \r
+20 resume get wait | 
 2 resume to local | \x09
 2 resume local big | f\x05\x15BIG.BIN\r
 2 resume local big last | \eOP\e[B
 4 resume put big | p
 4 resume put again | n
 30 resume replace big | y
+20 resume put wait | 
 2 local u | f\x05\x15U.TXT\r
 2 local u last | \eOP\e[B
 6 put u | p
