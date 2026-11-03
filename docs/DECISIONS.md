@@ -159,7 +159,7 @@ have spaces); saving after every connection (sites the user never asked for);
 keeping comments in place (VFTP would have to rewrite the user's file line by
 line; the old version stays on disk anyway).
 
-## D15. SCP: SFTP's session, files by scp, the rest by shell commands (2026-11-02, proposed)
+## D15. SCP: SFTP's session, files by scp, the rest by shell commands (2026-11-02, accepted)
 
 SCP is the third protocol on the Open form (port 22, like SFTP). The connection,
 host key (D7) and login are SFTP's, on the same libssh2 session code. Files go by
