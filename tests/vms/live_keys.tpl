@@ -6,6 +6,7 @@
 # Ctrl/C (\x03) cancels a transfer; it does nothing on the main screen, F10 exits.
 # PTYDRIVE knows \r \e \\ \xHH only: Tab is \x09. Pick files by filter and GOLD
 # Down (the last entry), not by counting rows: [.LIVE] holds directories too.
+# A wait is at most 30 seconds: PTYDRIVE takes a longer one as 1.5.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 3 form closed | \e[21~
@@ -41,10 +42,22 @@
 4 view remote | v
 2 view remote back | \x20
 2 to local | \x09
-2 local big | f\x05\x15BIG.*\r
+2 local big | f\x05\x15BIG.BIN\r
 2 local big last | \eOP\e[B
 1 put big | p
 4 cancel put | \x03
+# resume (D16): the cancels left BIG.BIN_VFTP-PART here and big.bin.vftp-part;1 on
+# the server. The Put goes on from its half first (Y), renamed to a new version
+# big.bin;2 (N19); then the Get of big.bin;1, the file its half came from (Return).
+2 resume local big last | \eOP\e[B
+4 resume put big | p
+30 resume put go on | y
+2 resume to remote | \x09
+2 resume remote top | \eOP\e[A
+2 resume remote big1 | \e[B
+4 resume get big | g
+30 resume get go on | \r
+2 resume to local | \x09
 2 local filter | f\x05\x15*.TXT\r
 2 local last | \eOP\e[B
 6 put txt | p

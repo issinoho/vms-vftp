@@ -97,6 +97,16 @@ $ directory/size=all/date 'live'big.bin;*,'remote'big.bin;*
 $ checksum/algorithm=md5 'remote'big.bin;1
 $ if checksum$checksum .eqs. big_md5 then write sys$output "LIVE: server BIG.BIN;1 unchanged"
 $ if checksum$checksum .nes. big_md5 then write sys$output "LIVE: server BIG.BIN;1 CHANGED"
+$! resume (D16): the resumed Put made the server's ;2 from the local ;1, the
+$! resumed Get the local highest from the server's ;1
+$ checksum/algorithm=md5 'live'big.bin;1
+$ write sys$output "LIVE-MD5 local big.bin;1 ''checksum$checksum'"
+$ checksum/algorithm=md5 'live'big.bin
+$ write sys$output "LIVE-MD5 local big.bin highest ''checksum$checksum'"
+$ checksum/algorithm=md5 'remote'big.bin;1
+$ write sys$output "LIVE-MD5 server big.bin;1 ''checksum$checksum'"
+$ checksum/algorithm=md5 'remote'big.bin
+$ write sys$output "LIVE-MD5 server big.bin highest ''checksum$checksum'"
 $ write sys$output "==== known_hosts: this node added?"
 $ search/statistics 'ssh'known_hosts. "localhost"
 $ goto log
@@ -110,6 +120,9 @@ $ if f$search(live + "r.bin") .eqs. "" then goto away_txt
 $ checksum/algorithm=md5 'live'r.bin
 $ write sys$output "LIVE-MD5 r.bin ''checksum$checksum'"
 $ away_txt:
+$! the highest big.bin: a resumed download (D16), or test_plat's own
+$ checksum/algorithm=md5 'live'big.bin
+$ write sys$output "LIVE-MD5 big.bin ''checksum$checksum'"
 $ type 'live'r.txt
 $ write sys$output "==== known_hosts: the server added?"
 $ search/statistics 'ssh'known_hosts. "''p3'"

@@ -26,7 +26,7 @@ big=$(md5sum < "$RDIR/big.bin" | cut -d' ' -f1)
 rbin=$(md5sum < "$RDIR/r.bin" | cut -d' ' -f1)
 mkdir -p "$top/out/$node"
 proto=()                                          # SCP: set on the form first
-[ -n "$scp" ] && proto=(-e '/^3 open | o$/a 2 protocol | \\e[A\\x05\\x15SCP\\e[B')
+[ -n "$scp" ] && proto=(-e '/^3 open | o$/a 2 protocol | \\e[A\\x05\\x15SCP\\e[B' -e '/^[0-9.]* resume /d')
 sed -e "s/@HOST@/$HOST/" -e "s/@PORT@/$PORT/" -e "s/@RUSER@/$(id -un)/" -e "s|@RDIR@|$RDIR|" "${proto[@]}" \
     "$top/tests/vms/live_unix.tpl" > "$top/out/$node/live_unix_keys.txt"
 "$top/tools/build.sh" "$node" TEST
@@ -41,8 +41,20 @@ grep -E '^LIVE' "$out" || true
 echo "==== the server's scratch directory"
 ls -la "$RDIR"
 ok() { if eval "$2"; then echo "UNIX: $1"; else echo "UNIX: FAILED: $1"; fi; }
-ok "big.bin unchanged after the cancelled replacing Put" '[ "$(md5sum < "$RDIR/big.bin" | cut -d" " -f1)" = "$big" ]'
+after=", and after the Put of its download"; [ -n "$scp" ] && after=
+ok "big.bin as it was after the cancelled replacing Put$after" \
+   '[ "$(md5sum < "$RDIR/big.bin" | cut -d" " -f1)" = "$big" ]'
 ok "no temporary .vftp-part file left" '! ls "$RDIR" | grep -q vftp-part'
+ok "no local half file left" '! grep -aqi "^big\.bin_vftp-part;" "$out"'
+if [ -z "$scp" ]; then                            # resume (D16)
+    ok "the cancelled Get kept a half file, the next one went on from it" \
+       'grep -aqi "KEPT .*big\.bin_VFTP-PART;1 to resume" "$out" && grep -aq "GET .*/big.bin RESUMED at " "$out"'
+    ok "big.bin downloaded by resuming, byte for byte" 'grep -aqi "^LIVE-MD5 big.bin $big" "$out"'
+    ok "the cancelled Put kept big.bin.vftp-part; N started it again" \
+       'grep -aq "KEPT .*/big.bin.vftp-part to resume" "$out" && grep -aq "DELETE .*/big.bin.vftp-part (a half file, started again)" "$out"'
+else
+    ok "SCP: no half file kept, nothing resumed" '! grep -aq "KEPT \|RESUMED" "$out"'
+fi
 ok "r.bin downloaded byte for byte" 'grep -qi "^LIVE-MD5 r.bin $rbin" "$out"'
 ok "r.txt downloaded as text lines" 'grep -qx "A text file on the Unix server." "$out" && grep -qx "Its second line." "$out"'
 ok "U.TXT put as LF lines, then renamed moved.txt" \

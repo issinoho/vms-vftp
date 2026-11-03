@@ -34,7 +34,7 @@
 3 remote attributes | a
 2 remote attributes back | \x20
 2 to local | \x09
-2 local big | f\x05\x15BIG.*\r
+2 local big | f\x05\x15BIG.BIN\r
 2 local big last | \eOP\e[B
 1 put big | p
 4 cancel put | \x03

@@ -1164,6 +1164,7 @@ static void transfer_ask(vf_app *a, int stage)
             snprintf(a->text_title, sizeof a->text_title, "%s: resume", get ? "Get" : "Put");
             a->mode = M_CONFIRM; a->prompt = P_ASK; a->ask = ASK_RESUME;
             vf_strlcpy(a->prompt_label, "Resume them? (Y/N) [Y]: ", sizeof a->prompt_label);
+            logf_("RESUME? %d half file%s", halves, halves == 1 ? "" : "s");
             vfp_flush_keys();
             return;
         }
@@ -1840,6 +1841,7 @@ static void ask_answer(vf_app *a, int key)
         return;
     case ASK_RESUME: {
         int i;
+        logf_("RESUME answered %s", yes || key == VK_RETURN ? "yes" : key == 'n' || key == 'N' ? "no: again" : "nothing");
         if (!yes && key != VK_RETURN && key != 'n' && key != 'N') {
             steps_free(a);
             vf_set_msg(a, 0, "Nothing copied; the half files are as they were");

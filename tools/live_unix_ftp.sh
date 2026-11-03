@@ -94,9 +94,16 @@ if [ -n "$tls" ]; then
 else
     ok "logged in after the D10 question" 'grep -aq "CLEAR PASSWORD agreed for vftptest@" "$out" && grep -q "USER .vftptest. logged in" "$d/ftpd.log"'
 fi
-ok "big.bin unchanged after the cancelled replacing Put" '[ "$(md5sum < "$r/big.bin" | cut -d" " -f1)" = "$big" ]'
+ok "big.bin as it was after the cancelled replacing Put, and after the Put of its download" \
+   '[ "$(md5sum < "$r/big.bin" | cut -d" " -f1)" = "$big" ]'
 ok "big.bin itself never opened to write" '! grep -q "<- STOR big.bin$" "$d/ftpd.log"'
 ok "no temporary .vftp-part file left" '! ls "$r" | grep -q vftp-part'
+ok "no local half file left" '! grep -aqi "^big\.bin_vftp-part;" "$out"'
+ok "the cancelled Get kept a half file, the next one went on from it (REST)" \
+   'grep -aqi "KEPT .*big\.bin_VFTP-PART;1 to resume" "$out" && grep -aq "GET .*big.bin RESUMED at " "$out" && grep -aq "<- REST " "$d/ftpd.log"'
+ok "big.bin downloaded by resuming, byte for byte" 'grep -aqi "^LIVE-MD5 big.bin $big" "$out"'
+ok "the cancelled Put kept big.bin.vftp-part; N started it again" \
+   'grep -aq "KEPT .*big.bin.vftp-part to resume" "$out" && grep -aq "DELETE .*big.bin.vftp-part (a half file, started again)" "$out"'
 ok "r.bin downloaded byte for byte (TYPE I)" 'grep -aqi "^LIVE-MD5 r.bin $rbin" "$out"'
 ok "r.txt downloaded as text lines (TYPE A)" 'grep -aqx "A text file on the Unix server." "$out" && grep -aqx "Its second line." "$out"'
 ok "U.TXT put as LF lines, then renamed moved.txt" \

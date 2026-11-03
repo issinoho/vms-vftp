@@ -5,6 +5,7 @@
 # first, then Y; no question about the password, which goes over TLS; and at the
 # end a second login, which must not ask again. The rest as live_unix_ftp.tpl.
 # PTYDRIVE knows \r \e \\ \xHH.
+# A wait is at most 30 seconds: PTYDRIVE takes a longer one as 1.5.
 2 dcl | set terminal/width=80/page=24\r
 8 start | vftp\r
 2 to protocol | \e[A
@@ -33,11 +34,26 @@
 4 view remote | v
 2 view remote back | \x20
 2 to local | \x09
-2 local big | f\x05\x15BIG.*\r
+2 local big | f\x05\x15BIG.BIN\r
 2 local big last | \eOP\e[B
 3 put big | p
 0.3 replace big | y
 4 cancel put | \x03
+# resume (D16; not by SCP: live_unix.sh --scp takes these lines out). The cancels
+# above left big.bin_VFTP-PART here and big.bin.vftp-part there. The Get goes on
+# from its half (Return); the Put is of the download now, not what its half came
+# from, so N starts it again (the half deleted) and Y replaces big.bin with it.
+2 resume to remote | \x09
+2 resume remote top | \eOP\e[A
+2 resume remote big | \e[B
+4 resume get big | g
+30 resume get go on | \r
+2 resume to local | \x09
+2 resume local big | f\x05\x15BIG.BIN\r
+2 resume local big last | \eOP\e[B
+4 resume put big | p
+4 resume put again | n
+30 resume replace big | y
 2 local u | f\x05\x15U.TXT\r
 2 local u last | \eOP\e[B
 6 put u | p

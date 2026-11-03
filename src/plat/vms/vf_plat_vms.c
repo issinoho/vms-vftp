@@ -887,9 +887,11 @@ void vfp_log(const char *line)
     FILE *f = fopen(spec && *spec ? spec : "SYS$LOGIN:VFTP.LOG", "a");
     vf_when w;
     char t[32];
+    time_t now = time(0);
     if (!f) return;
     vfp_now(&w);
-    fprintf(f, "%s %s\n", vf_fmt_when(&w, t, sizeof t), line);
+    /* to the second: how long each step took shows in the log */
+    fprintf(f, "%s:%02d %s\n", vf_fmt_when(&w, t, sizeof t), localtime(&now)->tm_sec, line);
     fclose(f);
 }
 

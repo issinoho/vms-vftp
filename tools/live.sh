@@ -57,6 +57,19 @@ if [ -n "$server" ]; then
     sed -n '/^==== \[.LIVE.REMOTE\]/,$p' "$top/out/server-$tag.txt"
 else
     "$top/tools/vms.sh" "$node" run tests/vms/test_live.com > "$out" 2>&1
+    grep -aE '^LIVE' "$out" || true
+    md5() { sed -n "s/^LIVE-MD5 $1 //p" "$out" | tr 'A-F' 'a-f'; }
+    ok() { if eval "$2"; then echo "LIVE: $1"; else echo "LIVE: FAILED: $1"; fi; }
+    ok "the cancelled Put kept big.bin.vftp-part, the next one went on from it (D16)" \
+       'grep -aq "KEPT .*big.bin.vftp-part to resume" "$out" && grep -aqi "PUT .*BIG.BIN;1 RESUMED at " "$out"'
+    ok "the resumed Put: the server's new big.bin;2 is the local BIG.BIN;1" \
+       '[ -n "$(md5 "local big.bin;1")" ] && [ "$(md5 "server big.bin highest")" = "$(md5 "local big.bin;1")" ] &&
+        grep -aqi "^big\.bin;2 " "$out"'
+    ok "the cancelled Get kept a half file, the next one went on from it" \
+       'grep -aqi "KEPT .*big\.bin_VFTP-PART;1 to resume" "$out" && grep -aqi "GET .*big.bin;1 RESUMED at " "$out"'
+    ok "the resumed Get: the local new version is the server's big.bin;1" \
+       '[ -n "$(md5 "server big.bin;1")" ] && [ "$(md5 "local big.bin highest")" = "$(md5 "server big.bin;1")" ]'
+    ok "no half file left on either side" '! grep -aqi "^big\.bin_vftp-part;\|^big\.bin\.vftp-part;" "$out"'
 fi
 sed -n '/^---- startup/,/^---- end/p' "$out" > "${out%.txt}.pty"
 args=()
