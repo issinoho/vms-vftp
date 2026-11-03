@@ -1,4 +1,4 @@
- VFTP  VFTP 0.0.0 help                                        25-OCT-2026 10:12
+ VFTP  VFTP 0.1.0 help                                        25-OCT-2026 10:12
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ MOVING                                                                       │
 │   Up/Down, Prev/Next Screen    move; GOLD Up/Down: first/last                │

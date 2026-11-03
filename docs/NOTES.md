@@ -426,3 +426,31 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
     file) takes 2.0-2.3 s on IA64, 0.03 s with no allocation; under 0.01 s either
     way on x86. No key is read during the open. The cancel step waits 8 s now.
 - live_unix.sh and live_unix_ftp.sh printed FAILED but exited 0; they exit 1 now.
+
+## N21. The kits, built and installed on both nodes (2026-11-03, tools/kit.sh, tests/vms/pcsi_*.com)
+
+- vms-libssh2 first (its own repo, after vms-zstd's kit): ISSINOHO-X86VMS- and
+  ISSINOHO-I64VMS-LIBSSH2-V0111-1E1-1.PCSI (1.11.1-vms1): LIBSSH2.OLB, an options
+  file naming it through LIBSSH2$ROOT, the three headers, COPYING, RELEASE-NOTES,
+  README.VMS, LIBSSH2$STARTUP.COM. Its installcheck.sh on both nodes, with the
+  user's agreement: installed, ssh2_smoke compiled against LIBSSH2$ROOT:[INCLUDE]
+  and linked with LIBSSH2$ROOT:[LIB]LIBSSH2/OPTIONS, its handshake with the
+  node's sshd passed (curve25519-sha256, ecdsa-sha2-nistp256,
+  chacha20-poly1305), then removed: no LIBSSH2$ROOT, no files, no startup left.
+- VFTP 0.1.0 (PCSI T0.1-0, after vms-vlmf's kit): ISSINOHO-X86VMS- and
+  ISSINOHO-I64VMS-VFTP-T0001-0-1.PCSI: VFTP.EXE (libssh2 linked in), VFTP$SETUP.COM,
+  README.VMS, LICENSE., LIBSSH2-COPYING., VFTP$STARTUP.COM (VFTP$ROOT and VFTP). The
+  description requires `VSI <base> SSL3` V3.0 or later (installed: V3.0-21 on x86,
+  V3.0-22 on IA64); PRODUCT PACKAGE and INSTALL took it. MAKE_KIT checks `VFTP -v`.
+- The first VFTP kit's VFTP$SETUP.COM defined `vlmf`, not `vftp` (copied from VLMF's,
+  only the upper-case name changed); tests/vms/test_installed.com showed it (the
+  command typed under PTYDRIVE did nothing). Fixed, the kits rebuilt; the first
+  install removed by tests/vms/pcsi_remove.com (nothing left) and the new one
+  installed.
+- Installed on both nodes and left so, with the user's agreement: `vftp -v` says
+  0.1.0; test_installed.com (the command from VFTP$SETUP.COM, under PTYDRIVE) shows
+  the Open form, the "VFTP 0.1.0 help" screen and exits. The live tests ran the
+  same image from [.BUILD] (N20); the installed one has not connected to a server.
+- build_vms.com uses LIBSSH2$ROOT:[000000] when no libssh2 tree is given and
+  VFTP_LIBSSH2 is not defined: a build from source needs only the libssh2 kit.
+  Not yet tried with the kit installed (it was removed after its check).

@@ -1,0 +1,99 @@
+VFTP @VERSION@ for OpenVMS (vms-vftp, @ARCH@) - EARLY TEST RELEASE
+=================================================================
+
+VFTP is a full-screen FTP, SFTP and SCP client: the local directory and a
+server's in two framed panes, with the LK201 keys, PF1 as the GOLD key and
+one-letter commands. It looks like VTREE (vms-vtree) and VLMF (vms-vlmf).
+
+    SFTP   by libssh2 (linked into VFTP.EXE), to any SSH server
+    SCP    files by scp, listing and the rest by shell commands: Unix servers
+           only (a VMS sshd has no Unix shell; use SFTP there)
+    FTP    plain or FTPS (AUTH TLS, explicit), passive mode
+
+Starting it
+-----------
+VFTP$SETUP.COM defines the VFTP command; a system manager can run it for
+everyone from SYS$MANAGER:SYLOGIN.COM:
+    $ @VFTP$ROOT:[000000]VFTP$SETUP.COM
+
+    $ VFTP                       ! the Open form, empty
+    $ VFTP user@host:port        ! the Open form filled in
+    $ VFTP mysite                ! a saved site (L)
+
+It needs a VT100-compatible terminal of at least 20 x 80. On a terminal
+without colour, DEFINE VFTP$DISPLAY MONO first. Help (or PF2) lists the keys;
+F10 or Ctrl/Z leaves.
+
+The keys
+--------
+  Up/Down, Prev/Next    move; GOLD Up/Down first/last
+  Tab                   the other pane (local / remote)
+  Return, Select, Right open the directory; on a file: View
+  Left, -, Backspace    up one directory
+  J                     jump to a directory (a VMS spec or a path)
+  O                     open a connection (SFTP, SCP or FTP); GOLD O closes it
+  L                     saved sites: open one, or save the Open form's
+  G, P                  Get (download), Put (upload) the tagged or current
+                        entries; a directory goes whole, with all that is in it
+  C, F5                 copy to the other pane (Get or Put)
+  D, Remove             delete (asks first)
+  R, M, V, A            rename, make a directory, view, attributes
+  GOLD A                a server's permissions: 644, rw-r--r--, go-w
+  T, Space              tag/untag; GOLD T all, GOLD U none, * by name
+  X                     transfer mode: AUTO, ASCII, BINARY
+  S, F                  sort, filter; GOLD V every version / highest only
+  GOLD W, Ctrl/W        read both panes again; redraw
+  F10, Ctrl/Z, Ctrl/C   cancel a transfer
+
+Text and binary
+---------------
+In AUTO mode a Put sends a file as text when it has variable or VFC records
+with carriage control, each record a line; a Get takes a file as text when
+its type is in VFTP$TEXT_TYPES (default .TXT .C .COM .HTML and others). Text
+arrives as variable-length records; binary as fixed 512-byte records when
+its size is a multiple of 512, otherwise as undefined records.
+
+Safety
+------
+- A download is always a new version: no local file is ever replaced.
+- A Put of a name the server has already, or a delete anywhere, shows what
+  would change and asks first; the default is No. On a server without
+  versions a Put goes to a temporary name and replaces the file only when it
+  has arrived whole, so a cancel leaves the old file as it was.
+- An SSH server's key is checked against SYS$LOGIN:[.SSH]KNOWN_HOSTS, as ssh
+  does: an unknown one shows its fingerprint and asks; a changed one is
+  refused. An FTPS server's certificate is pinned in [.SSH]VFTP_KNOWN_TLS.
+- Plain FTP sends the password in the clear: VFTP asks before it does.
+- Passwords are never stored: not in the sites file, not in the log.
+- Every operation is logged in VFTP$LOG (default SYS$LOGIN:VFTP.LOG).
+
+Logging in
+----------
+SSH: a key in SYS$LOGIN:[.SSH] (ID_ED25519, ID_ECDSA, ID_RSA, as ssh's) when
+the server takes it, else a password typed into the form. FTP: a password.
+
+Resuming
+--------
+A binary Get or Put by SFTP, or by FTP to a server whose FEAT lists REST
+STREAM, goes through a half file (NAME.EXT_VFTP-PART here, name.vftp-part
+on the server) that becomes the real file at the end. A transfer that is
+cancelled or fails keeps it; the next Get or Put of the file asks whether to
+go on from it (Y or Return), start again (N) or copy nothing. Text, SCP and
+FTP to a server without REST (the VMS FTP servers) start again.
+
+Files and logical names
+-----------------------
+  VFTP$SITES       the sites file (default SYS$LOGIN:VFTP.SITES)
+  VFTP$LOG         the log (default SYS$LOGIN:VFTP.LOG)
+  VFTP$TEXT_TYPES  file types a Get takes as text, e.g. ".TXT,.LIS,.LOG"
+  VFTP$DISPLAY     MONO for a terminal without colour
+
+What is installed
+-----------------
+    VFTP$ROOT:[000000]VFTP.EXE, VFTP$SETUP.COM, README.VMS, LICENSE.
+    VFTP$ROOT:[000000]LIBSSH2-COPYING.   libssh2's licence (it is linked in)
+    SYS$STARTUP:VFTP$STARTUP.COM         defines VFTP$ROOT and VFTP
+
+VFTP needs VSI's SSL3 kit (V3.0 or later) and no privileges.
+
+    https://github.com/issinoho/vms-vftp

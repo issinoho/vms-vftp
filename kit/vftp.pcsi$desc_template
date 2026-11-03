@@ -1,0 +1,29 @@
+--
+-- PCSI product description for VFTP (vms-vftp) on OpenVMS.
+-- Template: tools/kit.sh substitutes @PRODUCER@, @BASE@ and @PCSIVERSION@.
+--
+product @PRODUCER@ @BASE@ VFTP @PCSIVERSION@ full ;
+
+    -- VFTP.EXE has libssh2 linked in (vms-libssh2, D3) and uses VSI's SSL3
+    -- shareable images at run time: SSL3$LIBCRYPTO_SHR32, SSL3$LIBSSL_SHR32.
+    software VSI @BASE@ SSL3 version minimum V3.0 ;
+
+    information RELEASE_NOTES phase after ;
+
+    directory [VFTP] ;
+
+    file [VFTP]VFTP.EXE ;
+    file [VFTP]VFTP$SETUP.COM ;
+    file [VFTP]README.VMS ;
+    file [VFTP]LICENSE. ;
+    file [VFTP]LIBSSH2-COPYING. ;
+    file [SYS$STARTUP]VFTP$STARTUP.COM ;
+
+    -- Define VFTP$ROOT and VFTP now. VFTP installs no privileged images and
+    -- changes no login procedure: those are the system manager's.
+    execute postinstall "@PCSI$DESTINATION:[SYS$STARTUP]VFTP$STARTUP.COM INSTALL" interactive ;
+    execute install "CONTINUE" remove "@PCSI$DESTINATION:[SYS$STARTUP]VFTP$STARTUP.COM REMOVE" ;
+
+    information POST_INSTALL phase after ;
+
+end product ;

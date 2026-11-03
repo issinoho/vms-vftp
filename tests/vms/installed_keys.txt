@@ -1,0 +1,10 @@
+# PTYDRIVE script for test_installed.com: the installed VFTP, started by the
+# command VFTP$SETUP.COM defines; the Open form, closed; help; exit.
+# "<secs> <label> | <keys>"; at most 30 s a line.
+2 dcl | set terminal/width=80/page=24\r
+8 start | vftp\r
+3 form closed | \e[21~
+3 help | \e[28~
+2 help back | \x20
+3 exit | \e[21~
+2 version | vftp -v\r

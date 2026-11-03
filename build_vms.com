@@ -2,7 +2,8 @@ $! build_vms.com - build VFTP on OpenVMS (x86-64 or IA64), always from clean.
 $!   @build_vms [TEST] libssh2
 $!     TEST     also build and run the unit and snapshot tests (TEST-OK)
 $!     libssh2  the vms-libssh2 install tree, e.g. DEV:[DIR.INSTALL_X86_64]
-$!              (its [.INCLUDE] and [.LIB]LIBSSH2.OPT); default VFTP_LIBSSH2
+$!              (its [.INCLUDE] and [.LIB]LIBSSH2.OPT); default VFTP_LIBSSH2,
+$!              then LIBSSH2$ROOT:[000000] (the vms-libssh2 kit installed)
 $! Any compiler warning stops the build (as -Werror does on Linux).
 $ set noon
 $ here = f$parse(f$environment("PROCEDURE"),,,"DEVICE") + f$parse(f$environment("PROCEDURE"),,,"DIRECTORY")
@@ -12,6 +13,8 @@ $ if f$search("build.dir") .eqs. "" then create/directory [.build]
 $! Under /STANDARD=C99 only ANSI names get the DECC$ prefix: ALL_ENTRIES maps the rest.
 $ ssh2 = p2
 $ if ssh2 .eqs. "" then ssh2 = f$trnlnm("VFTP_LIBSSH2")
+$! else the installed vms-libssh2 kit: LIBSSH2$ROOT has [INCLUDE] and [LIB]LIBSSH2.OPT
+$ if ssh2 .eqs. "" .and. f$trnlnm("LIBSSH2$ROOT") .nes. "" then ssh2 = "LIBSSH2$ROOT:[000000]"
 $ if ssh2 .eqs. "" then goto no_ssh2
 $ ssh2inc = ssh2 - "]" + ".INCLUDE]"
 $ ssh2opt = ssh2 - "]" + ".LIB]LIBSSH2.OPT"

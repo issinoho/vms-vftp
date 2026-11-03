@@ -1,0 +1,18 @@
+=product @PRODUCER@ @BASE@ VFTP @PCSIVERSION@ full
+1 'PRODUCER
+=prompt @PRODUCER@
+1 'PRODUCT
+=prompt VFTP @VERSION@ for OpenVMS (vms-vftp): full-screen FTP, SFTP and SCP client, early test
+1 'NOTICE
+=prompt VFTP is distributed under the MIT licence; libssh2 in it under BSD-3-Clause. Early test release.
+1 RELEASE_NOTES
+=prompt Documentation is in [VFTP]README.VMS under the installation directory.
+1 POST_INSTALL
+=prompt Post-installation tasks for VFTP (vms-vftp)
+    At boot, add to SYS$MANAGER:SYSTARTUP_VMS.COM:
+    $ @SYS$STARTUP:VFTP$STARTUP.COM
+    For users, in SYS$MANAGER:SYLOGIN.COM or a LOGIN.COM (defines VFTP):
+    $ @VFTP$ROOT:[000000]VFTP$SETUP.COM
+
+PRODUCT REMOVE VFTP deassigns VFTP$ROOT and VFTP. Users' sites files, logs,
+known_hosts and known_tls in SYS$LOGIN are not touched.

@@ -151,6 +151,13 @@ vms-libssh2 released first (its own kit, for other ports too); VFTP links it
 statically (D3), so VFTP's kit needs only SSL3. Kits via `tools/kit.sh`,
 `VFTP$STARTUP.COM` and `VFTP$SETUP.COM` as VLMF's, the family release process.
 
+Status 2026-11-03: the vms-libssh2 kit (1.11.1-vms1) built on both nodes, installed,
+checked with a smoke test built against it, and removed. VFTP 0.1.0 (T0.1-0) kits
+built, installed on both nodes and left installed; the installed image starts,
+shows help and reports its version (N21). Left: the GitHub repositories and
+releases (vms-libssh2 first), SYSTARTUP and SYLOGIN on the nodes (vms-site-config),
+both the user's to start.
+
 ## Later ideas
 
 Keeping VMS file attributes across VMS-to-VMS transfers (as a sidecar or by
