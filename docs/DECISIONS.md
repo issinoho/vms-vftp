@@ -183,3 +183,38 @@ Considered: SCP to VMS sshd (no shell to list with, and VMS scp is not what Unix
 scp is); the size by a temporary copy in SYS$SCRATCH (twice the disk, and no
 progress while it is sent); listing by SFTP when the server has it (then it is
 SFTP).
+
+## D16. Resume: binary transfers through a half file under a temporary name (2026-11-03, proposed)
+
+The shape was chosen by the user (a temporary name, binary only, ask with Resume as
+the default); the details are proposed. A binary transfer by a protocol that can
+start at an offset (SFTP; FTP when the server's FEAT has `REST STREAM`) writes to a
+half file and gives it the real name only when the transfer has finished:
+- A Get writes `NAME.EXT_VFTP-PART` (`_VFTP-PART` added to the type, so it is valid
+  on ODS-2 too) and renames it to `NAME.EXT` at the end. RMS $RENAME always makes a
+  new version (N19), so D8 holds and a half file never looks like a whole one.
+- A Put writes `name.vftp-part` on the server and renames it at the end: to a new
+  version on a VMS server (its sshd's rename does that, N19), with `mv -f` / SFTP
+  rename over the old file on a server without versions when the user said Y to
+  replacing it, as today.
+- A cancelled or failed transfer keeps its half file: locally only the whole
+  512-byte blocks written (the end set there), on the server every byte written.
+- The next Get or Put of the same file finds it while planning (D13). When it is
+  smaller than the source, one question covers the transfer: "N half files from
+  an earlier try: resume them?" with each name and its size so far against the
+  full size; Y (the default) resumes from the half file's size, N starts again
+  and deletes those half files (VFTP's own, never the user's). A half file not
+  smaller than the source cannot be from this file as it is now: it is started
+  again, and the message says so.
+- Text transfers (records become LF lines, or back, so a byte offset does not map
+  onto a record), SCP (no offset in the protocol) and FTP to a server without
+  REST (the VMS servers, N8) do as now: they write the real name, and a cancel or
+  failure leaves no half file.
+- A half file is trusted by its name and size: if the source changed in the part
+  already copied, the result is wrong. The question shows both sizes and the half
+  file's date, so the user can say N.
+Considered (the user's choice): resuming into the half new version itself (it looks
+whole until then); copying the half file into a new version and going on (a copy
+each time, and half versions pile up); text resume (the counts drift on a split
+long record or a CR-LF file); no question (a half file from another source would
+be used without a word).

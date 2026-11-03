@@ -378,3 +378,18 @@ makes files 0664, so go-r gave 0620 (`SITE CHMOD 620 moved.txt`).
   SCP to VMS sshd refused "no Unix shell").
 - x86's sshd moved to a new port during these runs (set by the user;
   tools/nodes.conf has it); live_dirs.sh passed on the new port.
+
+## N19. Resume's pieces on both nodes (2026-11-03, probes/probe_sftp_resume.sh, probes/probe_rename.c)
+
+- The node's own sshd, by OpenSSH's sftp from Linux (300000 random bytes, a 100000
+  byte half): a name `a.bin.vftp-part` is taken as it is (`a.bin.vftp-part;1`);
+  renaming it onto `a.bin`, which exists, makes `a.bin;2` and leaves `a.bin;1`;
+  onto a name that does not exist, `b.bin;1`. `reput` (a write at the half's
+  offset) and `reget` (a read from it) give files with the full one's md5. The
+  same on x86 and IA64.
+- RMS, probes/probe_rename.c in a scratch directory: sys$rename of a temporary
+  file onto A.BIN, which has a version, gives A.BIN;2, and A.BIN; and A.BIN;0
+  give ;3 and ;4: always a new version, never a replacement; onto N.BIN, N.BIN;1.
+  A fixed-512 block-I/O file of 2 blocks, opened again by $OPEN (PUT, BIO) and
+  written at VBN 3 and 4, beyond what was allocated: 4 blocks, its records A B C D,
+  the end of file after block 4. The same on x86 and IA64.
