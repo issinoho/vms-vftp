@@ -6,6 +6,7 @@ $ old_privs = f$setprv("SYSPRV,SYSNAM,CMKRNL,BYPASS")
 $ arch = f$edit(f$getsyi("ARCH_NAME"), "UPCASE")
 $ base = "I64VMS"
 $ if arch .eqs. "X86_64" then base = "X86VMS"
+$ if arch .eqs. "ALPHA" then base = "AXPVMS"
 $ kitdir = f$environment("DEFAULT") - "]" + ".KIT_''arch']"
 $ write sys$output "=== INSTALL from ", kitdir
 $ product install VFTP /producer=ISSINOHO /base_system='base' /source='kitdir' /options=noconfirm /log
